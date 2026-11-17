@@ -47,7 +47,7 @@ function ReviewBillsScreen() {
   const list = bills.data ?? [];
 
   return (
-    <Screen title="Bills to review" subtitle="Bills added to advances" backFallback="/home" scroll={false}>
+    <Screen title="Bills to review" subtitle="Bills added to cash requests" backFallback="/home" scroll={false}>
       {bills.isLoading && !bills.data ? (
         <LoadingState />
       ) : bills.error && !bills.data ? (
@@ -63,7 +63,7 @@ function ReviewBillsScreen() {
             list.length ? (
               <Text style={styles.hint}>
                 {list.length === 1 ? '1 bill is' : `${list.length} bills are`} waiting. Approving a bill counts it as
-                spent from the advance.
+                spent from the cash request.
               </Text>
             ) : undefined
           }
@@ -163,9 +163,9 @@ function BillReviewCard({
         haptic="tap"
         onPress={() => router.push({ pathname: '/ticket/[id]', params: { id: bill.ticket.id } })}
         accessibilityRole="button"
-        accessibilityLabel={`Open the advance ${bill.ticket.purpose}`}
+        accessibilityLabel={`Open the cash request ${bill.ticket.purpose}`}
         style={styles.advance}>
-        <Text style={styles.advanceLabel}>On advance · {bill.ticket.department.name}</Text>
+        <Text style={styles.advanceLabel}>Cash request · {bill.ticket.department.name}</Text>
         <Text style={styles.advanceTitle} numberOfLines={1}>
           {bill.ticket.purpose}
         </Text>

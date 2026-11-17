@@ -84,6 +84,9 @@ export function trackerText(status: TicketStatus, isMine: boolean, isBill = fals
     if (text) return text;
   }
   if (isMine && status === 'PENDING' && myRole && OWN_PENDING_BY_ROLE[myRole]) return OWN_PENDING_BY_ROLE[myRole];
+  if (isMine && status === 'SETTLEMENT_PENDING' && myRole === 'FINANCE_MANAGER') {
+    return 'You finished spending. Waiting for the CEO to close it';
+  }
   return (isMine ? OWN_TEXT : OTHER_TEXT)[status];
 }
 

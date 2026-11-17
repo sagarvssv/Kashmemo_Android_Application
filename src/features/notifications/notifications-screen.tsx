@@ -9,7 +9,7 @@ import { PressableScale } from '@/components/motion';
 import { Screen } from '@/components/screen';
 import { EmptyState, ErrorState, LoadingState } from '@/components/states';
 import { motion, staggerDelay } from '@/constants/motion';
-import { radius, spacing } from '@/constants/theme';
+import { radius, spacing, TAB_BAR_CLEARANCE } from '@/constants/theme';
 import { useRealtime, useSession } from '@/context/session';
 import { createStyles, useColors } from '@/context/theme';
 import { useCursorList } from '@/hooks/use-api';
@@ -162,7 +162,7 @@ const useStyles = createStyles((colors) => ({
   },
   list: {
     paddingHorizontal: spacing.four,
-    paddingBottom: spacing.eight,
+    paddingBottom: TAB_BAR_CLEARANCE,
   },
   separator: {
     height: spacing.two,

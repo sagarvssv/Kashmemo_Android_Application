@@ -205,7 +205,7 @@ export type OutstandingAdvance = {
   raisedBy: string;
   disbursedAt: string | null;
   department: { id: string; name: string };
-  employee: { id: string; name: string; email: string; phoneNumber: string | null } | null;
+  employee: { id: string; name: string; email: string; phoneNumber: string | null; role?: UserRole } | null;
   pendingBills: number;
   toReturn: number;
   toPay: number;

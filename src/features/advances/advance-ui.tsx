@@ -21,7 +21,7 @@ type IconName = keyof typeof Ionicons.glyphMap;
 // What happened to the money, in plain words. Amounts are signed: + cash went
 // to the employee, - cash was accounted for.
 export const WALLET_TXN: Record<WalletTxnType, { label: string; icon: IconName }> = {
-  ADVANCE_CREDIT: { label: 'Advance cash received', icon: 'arrow-down-circle' },
+  ADVANCE_CREDIT: { label: 'Requested cash received', icon: 'arrow-down-circle' },
   BILL_DEBIT: { label: 'Bill approved', icon: 'receipt' },
   CASH_RETURNED: { label: 'Unspent cash returned', icon: 'arrow-up-circle' },
   OVERSPEND_PAID: { label: 'Overspend paid to you', icon: 'cash' },
@@ -88,7 +88,10 @@ function Figure({ label, value, color }: { label: string; value: string; color?:
   return (
     <View style={styles.figure}>
       <Text style={styles.figureLabel}>{label}</Text>
-      <Text style={[styles.figureValue, color ? { color } : null]} numberOfLines={1} adjustsFontSizeToFit>
+      {/* No adjustsFontSizeToFit: on Android it can draw nothing at all. */}
+      <Text
+        style={[styles.figureValue, value.length > 9 && styles.figureValueLong, color ? { color } : null]}
+        numberOfLines={2}>
         {value}
       </Text>
     </View>
@@ -122,7 +125,7 @@ export function AdvanceCard({
       haptic="tap"
       onPress={() => router.push({ pathname: '/ticket/[id]', params: { id } })}
       accessibilityRole="button"
-      accessibilityLabel={`Advance ${purpose}`}>
+      accessibilityLabel={`Cash request ${purpose}`}>
       <Card>
         <View style={styles.cardHeader}>
           <View style={styles.cardTitleBox}>
@@ -200,6 +203,9 @@ const useStyles = createStyles((colors) => ({
     fontSize: 16,
     fontWeight: '700',
     color: colors.textPrimary,
+  },
+  figureValueLong: {
+    fontSize: 13,
   },
   hint: {
     fontSize: 12,

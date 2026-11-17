@@ -1,429 +1,388 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useState } from 'react';
 import { Text, View } from 'react-native';
 
-import { Card, Section } from '@/components/card';
+import { ChipGroup } from '@/components/chip-group';
 import { PressableScale } from '@/components/motion';
 import { Screen } from '@/components/screen';
-import { StatGrid, StatTile } from '@/components/stat-tile';
-import { TicketTracker, trackerText } from '@/components/ticket-tracker';
-import { ErrorState } from '@/components/states';
-import { radius, spacing } from '@/constants/theme';
+import { iconBadge, radius, spacing, typography } from '@/constants/theme';
 import { useFormatMoney } from '@/context/currency';
 import { useCurrentUser, useRealtime } from '@/context/session';
 import { createStyles, useColors, useTheme } from '@/context/theme';
 import { useApi } from '@/hooks/use-api';
 import { ticketApi } from '@/lib/endpoints';
+import { STATUS_LABELS, toAmount } from '@/lib/format';
 import { invoiceApiEnabled } from '@/lib/invoices';
-import { formatRelative, toAmount } from '@/lib/format';
 import type { Ticket, TicketStatus } from '@/lib/types';
 
-import { greetingSubtitle, greetingTitle, NotificationBell } from './shared';
+import { greetingLine, greetingTitle, HomeAvatar, HomeMeta, NotificationBell, TicketPreviewList } from './shared';
 
-// Enough to count an employee's tickets by status without a summary endpoint.
-const COUNT_LIMIT = 100;
+const RECENT_SIZE = 5;
+// Fallback count of this month's requests when the summary route is missing.
+const MONTH_LIMIT = 100;
+// Waiting totals stop here and show "100+".
+const PENDING_LIMIT = 100;
 
 type IconName = keyof typeof Ionicons.glyphMap;
+type RecentFilter = TicketStatus | 'ALL';
+const RECENT_FILTERS: TicketStatus[] = ['PENDING', 'PARTIALLY_APPROVED', 'APPROVED', 'DISBURSED', 'REJECTED'];
 
-// Kept simple for people who may not read well: big picture buttons, short
-// words, colours that match the ticket status everywhere else in the app.
+// How many bills and cash requests the user raised this month. Falls back to
+// counting their latest requests if the server has no summary route.
+async function countRaisedThisMonth(): Promise<{ count: number; capped: boolean }> {
+  const now = new Date();
+  try {
+    const { data } = await ticketApi.raisedInMonth({ month: now.getMonth() + 1, year: now.getFullYear() });
+    return { count: data.count, capped: false };
+  } catch {
+    const since = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const response = await ticketApi.mine({ limit: MONTH_LIMIT });
+    const tickets: Ticket[] = response.data ?? [];
+    const inMonth = tickets.filter((ticket) => new Date(ticket.createdAt).getTime() >= since);
+    return { count: inMonth.length, capped: inMonth.length === tickets.length && Boolean(response.nextCursor) };
+  }
+}
+
+// Waiting on someone: fully pending, or approved by one approver of several.
+async function loadPending(): Promise<{ count: number; amount: number; capped: boolean }> {
+  const [pending, partial] = await Promise.all([
+    ticketApi.mine({ status: 'PENDING', limit: PENDING_LIMIT }),
+    ticketApi.mine({ status: 'PARTIALLY_APPROVED', limit: PENDING_LIMIT }),
+  ]);
+  const tickets = [...(pending.data ?? []), ...(partial.data ?? [])];
+  return {
+    count: tickets.length,
+    amount: tickets.reduce((sum, ticket) => sum + toAmount(ticket.amount), 0),
+    capped: Boolean(pending.nextCursor || partial.nextCursor),
+  };
+}
+
+// Employee Home, same layout as the iOS app's (in this app's colours and
+// wording): three figures, the Fast Track card with the main actions, and the
+// latest requests with status filters.
 export function EmployeeDashboard() {
   const styles = useStyles();
-  const user = useCurrentUser();
+  const colors = useColors();
+  const { statusColors, statusChartColors } = useTheme();
   const formatMoney = useFormatMoney();
-  const wallet = useApi(() => ticketApi.wallet(), []);
-  const tickets = useApi(() => ticketApi.mine({ limit: COUNT_LIMIT }), []);
+  const user = useCurrentUser();
+  const [filter, setFilter] = useState<RecentFilter>('ALL');
 
-  useRealtime(['ticket:status-update', 'ticket:created'], () => {
+  const raised = useApi(() => countRaisedThisMonth(), []);
+  const pending = useApi(() => loadPending(), []);
+  const wallet = useApi(() => ticketApi.wallet(), []);
+  const recent = useApi(
+    () => ticketApi.mine({ limit: RECENT_SIZE, status: filter === 'ALL' ? undefined : filter }),
+    [filter],
+  );
+
+  useRealtime(['ticket:created', 'ticket:status-update'], () => {
+    void raised.reload();
+    void pending.reload();
     void wallet.reload();
-    void tickets.reload();
+    void recent.reload();
   });
 
   const refresh = async () => {
-    await Promise.all([wallet.refresh(), tickets.refresh()]);
+    await Promise.all([raised.refresh(), pending.refresh(), wallet.refresh(), recent.refresh()]);
   };
 
+  const placeholder = (state: { error: string | null }) => (state.error ? '—' : '…');
   const walletData = wallet.data?.data;
-  // + advance cash with the employee, - what finance owes them.
-  const balance = walletData?.balance ?? 0;
-  const collectTotal = (walletData?.awaitingCollection ?? []).reduce((sum, ticket) => sum + toAmount(ticket.amount), 0);
-  const list = tickets.data?.data;
-  const latest = list?.[0];
-  // The wallet endpoint counts only approved and paid tickets, so money still
-  // waiting for approval (e.g. a bill just sent) is added up from the list.
-  const waiting = (list ?? []).filter((ticket) => ticket.status === 'PENDING' || ticket.status === 'PARTIALLY_APPROVED');
-  const waitingTotal = waiting.reduce((sum, ticket) => sum + toAmount(ticket.amount), 0);
-  // Advances are on the Advances tab and claims on the Claims tab, so the
-  // tile opens wherever the waiting money is (advances first).
-  const waitingOnlyBills = invoiceApiEnabled && waiting.length > 0 && waiting.every((ticket) => ticket.source === 'RECEIPT');
-  const advances = list?.filter((ticket) => ticket.source !== 'RECEIPT');
+  // Approved, not yet collected from finance.
+  const awaitingCollection = (walletData?.awaitingCollection ?? []).reduce(
+    (sum, ticket) => sum + toAmount(ticket.amount),
+    0,
+  );
+  const openRequests = walletData?.openAdvances.length ?? 0;
+
+  const filterOptions: { value: RecentFilter; label: string }[] = [
+    { value: 'ALL', label: 'All' },
+    ...RECENT_FILTERS.map((status) => ({ value: status, label: STATUS_LABELS[status] })),
+  ];
 
   return (
     <Screen
+      overline={greetingLine()}
       title={greetingTitle(user)}
-      subtitle={greetingSubtitle(user)}
+      leading={<HomeAvatar />}
+      meta={<HomeMeta label="Employee Dashboard" icon="grid-outline" />}
+      // Employees have no Alerts tab, so notifications open from here.
       right={<NotificationBell />}
-      refreshing={wallet.isRefreshing || tickets.isRefreshing}
+      refreshing={raised.isRefreshing || pending.isRefreshing || wallet.isRefreshing || recent.isRefreshing}
       onRefresh={refresh}>
-      {wallet.error && !walletData ? <ErrorState message={wallet.error} onRetry={wallet.reload} /> : null}
-
-      {/* Each tile opens My wallet on the matching tab. */}
-      <StatGrid>
-        <StatTile
-          label="Waiting for approval"
-          value={formatMoney(waitingTotal)}
+      <View style={styles.metrics}>
+        <Metric
+          icon="receipt-outline"
+          label="Total bills raised"
+          value={raised.data ? `${raised.data.count}${raised.data.capped ? '+' : ''}` : placeholder(raised)}
+          footer={<Text style={styles.metricCaption}>This month</Text>}
+        />
+        <Metric
           icon="hourglass-outline"
-          onPress={() =>
-            waitingOnlyBills
-              ? router.push('/bills')
-              : router.push({ pathname: '/tickets', params: { scope: 'mine', status: 'PENDING' } })
+          tint={statusColors.PENDING.text}
+          label="Pending amount"
+          value={pending.data ? formatMoney(pending.data.amount) : placeholder(pending)}
+          footer={
+            pending.data ? (
+              <View style={[styles.badge, { backgroundColor: statusColors.PENDING.background }]}>
+                <View style={[styles.badgeDot, { backgroundColor: statusChartColors.PENDING }]} />
+                <Text style={[styles.badgeText, { color: statusColors.PENDING.text }]} numberOfLines={1}>
+                  {pending.data.count}
+                  {pending.data.capped ? '+' : ''} waiting for approval
+                </Text>
+              </View>
+            ) : null
           }
-          accessibilityHint="Opens what is waiting for approval"
         />
-        <StatTile
-          label="Approved · collect from finance"
-          value={formatMoney(collectTotal)}
-          icon="time-outline"
-          tone="highlight"
-          onPress={() => router.push({ pathname: '/wallet', params: { tab: 'collect' } })}
-          accessibilityHint="Opens the approved money you can collect from finance"
-        />
-        <StatTile
-          label={balance < 0 ? 'Finance owes you' : 'Cash with you'}
-          value={formatMoney(Math.abs(balance))}
+        <Metric
           icon="wallet-outline"
-          onPress={() => router.push({ pathname: '/wallet', params: { tab: 'advances' } })}
-          accessibilityHint="Opens your open advances"
+          tint={statusColors.APPROVED.text}
+          label="Wallet · cash in hand"
+          value={walletData ? formatMoney(walletData.cashInHand) : placeholder(wallet)}
+          onPress={() => router.push('/wallet')}
+          footer={
+            walletData ? (
+              walletData.overspent > 0 ? (
+                <View style={[styles.badge, { backgroundColor: statusColors.REJECTED.background }]}>
+                  <View style={[styles.badgeDot, { backgroundColor: statusChartColors.REJECTED }]} />
+                  <Text style={[styles.badgeText, { color: statusColors.REJECTED.text }]} numberOfLines={1}>
+                    Overspent · {formatMoney(walletData.overspent)} owed to you
+                  </Text>
+                </View>
+              ) : (
+                <View style={[styles.badge, { backgroundColor: statusColors.APPROVED.background }]}>
+                  <View style={[styles.badgeDot, { backgroundColor: statusChartColors.APPROVED }]} />
+                  <Text style={[styles.badgeText, { color: statusColors.APPROVED.text }]} numberOfLines={1}>
+                    {awaitingCollection > 0
+                      ? `${formatMoney(awaitingCollection)} to collect from finance`
+                      : `${openRequests} open cash request${openRequests === 1 ? '' : 's'}`}
+                  </Text>
+                </View>
+              )
+            ) : null
+          }
         />
-      </StatGrid>
-
-      {/* Two ways to get money: ask before spending, or claim back with a bill.
-          The backend requires a department on a ticket's raiser. */}
-      <View style={styles.actions}>
-        {user.departmentId ? (
-          <ActionTile
-            primary
-            icon="add"
-            title="Request an advance"
-            hint="Need cash before you spend"
-            onPress={() => router.push('/raise-ticket')}
-          />
-        ) : null}
-        {invoiceApiEnabled ? (
-          <ActionTile
-            icon="camera"
-            title="Claim money back"
-            hint="Spent your own money"
-            onPress={() => router.push('/upload-bill')}
-          />
-        ) : null}
       </View>
 
-      {/* My claims has its own tab for employees. */}
-      <LinkTile icon="wallet" title="My wallet" hint="See money approved and paid to you" href="/wallet" />
-
-      {advances && advances.length > 0 ? (
-        <Section title="My advances" action={{ label: 'See all', onPress: () => router.push('/tickets') }}>
-          <StatusCounts tickets={advances} />
-        </Section>
-      ) : null}
-
-      {list ? (
-        latest ? (
-          <Section title={latest.source === 'RECEIPT' ? 'Latest claim' : 'Latest advance'}>
-            <LatestTicket ticket={latest} />
-          </Section>
+      {/* Fast Track: the main call to action. */}
+      <View style={[styles.fastTrack, { backgroundColor: colors.primary }]}>
+        <View style={styles.fastTrackHeader}>
+          <Ionicons name="flash" size={14} color="#FFFFFF" />
+          <Text style={styles.fastTrackOverline}>Fast Track</Text>
+        </View>
+        <Text style={styles.fastTrackTitle}>Need reimbursement?</Text>
+        <Text style={styles.fastTrackBody}>Snap your bill and send it within 24 hours.</Text>
+        {invoiceApiEnabled ? (
+          <PressableScale
+            haptic="tap"
+            onPress={() => router.push('/upload-bill')}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.fastTrackButton, pressed && styles.pressed]}>
+            <Ionicons name="camera" size={18} color={colors.primary} />
+            <Text style={[styles.fastTrackButtonText, { color: colors.primary }]}>Scan a bill</Text>
+          </PressableScale>
+        ) : null}
+        {/* The backend needs a department on whoever asks for cash. */}
+        {user.departmentId ? (
+          <PressableScale
+            haptic="tap"
+            onPress={() => router.push('/raise-ticket')}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.fastTrackButton, styles.fastTrackButtonOutline, pressed && styles.pressed]}>
+            <Ionicons name="add-circle" size={18} color="#FFFFFF" />
+            <Text style={[styles.fastTrackButtonText, { color: '#FFFFFF' }]}>Request cash</Text>
+          </PressableScale>
         ) : (
-          <Section title="How it works">
-            <HowItWorks />
-          </Section>
-        )
-      ) : null}
+          <Text style={styles.fastTrackBody}>Ask your admin to assign you a department to request cash.</Text>
+        )}
+      </View>
+
+      <TicketPreviewList
+        title="Recent requests"
+        filter={<ChipGroup options={filterOptions} value={filter} onChange={setFilter} />}
+        tickets={recent.isLoading ? undefined : recent.data?.data}
+        emptyTitle={
+          recent.error ??
+          (recent.isLoading
+            ? 'Loading…'
+            : filter === 'ALL'
+              ? "You haven't raised anything yet"
+              : `Nothing ${STATUS_LABELS[filter].toLowerCase()}`)
+        }
+        onSeeAll={() => router.push({ pathname: '/tickets', params: filter === 'ALL' ? {} : { status: filter } })}
+      />
     </Screen>
   );
 }
 
-// A big square button for the two main actions.
-function ActionTile({
+// A figure card: icon badge, small label, big value, and a footer line.
+function Metric({
   icon,
-  title,
-  hint,
-  primary,
+  tint,
+  label,
+  value,
+  footer,
   onPress,
 }: {
   icon: IconName;
-  title: string;
-  hint: string;
-  primary?: boolean;
-  onPress: () => void;
+  tint?: string;
+  label: string;
+  value: string;
+  footer?: React.ReactNode;
+  onPress?: () => void;
 }) {
   const styles = useStyles();
   const colors = useColors();
+  const accent = tint ?? colors.primary;
+  const content = (
+    <>
+      <View style={styles.metricTop}>
+        <View style={[styles.metricIcon, { backgroundColor: iconBadge(accent) }]}>
+          <Ionicons name={icon} size={16} color={accent} />
+        </View>
+        {onPress ? <Ionicons name="chevron-forward" size={14} color={colors.textMuted} /> : null}
+      </View>
+      <Text style={styles.metricLabel} numberOfLines={1}>
+        {label}
+      </Text>
+      {/* No adjustsFontSizeToFit: on Android it can draw nothing at all. */}
+      <Text style={[styles.metricValue, value.length > 11 && styles.metricValueLong]} numberOfLines={1}>
+        {value}
+      </Text>
+      {footer}
+    </>
+  );
+  if (!onPress) return <View style={[styles.metric, styles.metricCard]}>{content}</View>;
   return (
     <PressableScale
       haptic="tap"
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${title}. ${hint}`}
-      style={[styles.actionTile, primary && styles.tilePrimary]}>
-      <View style={[styles.iconCircle, primary && styles.iconCirclePrimary]}>
-        <Ionicons name={icon} size={32} color={colors.primary} />
-      </View>
-      <Text style={[styles.tileTitle, primary && styles.onPrimary]}>{title}</Text>
-      <Text style={[styles.tileHint, primary && styles.onPrimaryMuted]}>{hint}</Text>
+      accessibilityLabel={`${label}: ${value}`}
+      style={({ pressed }) => [styles.metric, styles.metricCard, pressed && styles.pressed]}>
+      {content}
     </PressableScale>
-  );
-}
-
-// A full-width row that opens another screen.
-function LinkTile({ icon, title, hint, href }: { icon: IconName; title: string; hint: string; href: '/wallet' }) {
-  const styles = useStyles();
-  const colors = useColors();
-  return (
-    <PressableScale
-      haptic="tap"
-      onPress={() => router.push(href)}
-      accessibilityRole="button"
-      accessibilityLabel={title}
-      style={styles.tile}>
-      <View style={styles.iconCircleSmall}>
-        <Ionicons name={icon} size={24} color={colors.primary} />
-      </View>
-      <View style={styles.tileText}>
-        <Text style={styles.linkTitle}>{title}</Text>
-        <Text style={styles.tileHint}>{hint}</Text>
-      </View>
-      <Ionicons name="chevron-forward" size={22} color={colors.textMuted} />
-    </PressableScale>
-  );
-}
-
-// Four status boxes. "Partially approved" is still waiting from the
-// employee's point of view, so it is counted with "Waiting".
-const COUNT_BOXES: { label: string; icon: IconName; color: TicketStatus; statuses: TicketStatus[] }[] = [
-  { label: 'Waiting', icon: 'hourglass-outline', color: 'PENDING', statuses: ['PENDING', 'PARTIALLY_APPROVED'] },
-  { label: 'Approved', icon: 'thumbs-up-outline', color: 'APPROVED', statuses: ['APPROVED'] },
-  { label: 'Paid', icon: 'cash-outline', color: 'DISBURSED', statuses: ['DISBURSED', 'SETTLEMENT_PENDING', 'SETTLED'] },
-  { label: 'Rejected', icon: 'close-circle-outline', color: 'REJECTED', statuses: ['REJECTED'] },
-];
-
-function StatusCounts({ tickets }: { tickets: Ticket[] }) {
-  const styles = useStyles();
-  const { statusColors } = useTheme();
-  const more = tickets.length >= COUNT_LIMIT ? '+' : '';
-  return (
-    <View style={styles.counts}>
-      {COUNT_BOXES.map((box) => {
-        const count = tickets.filter((ticket) => box.statuses.includes(ticket.status)).length;
-        const tone = statusColors[box.color];
-        return (
-          <PressableScale
-            key={box.label}
-            haptic="tap"
-            onPress={() => router.push('/tickets')}
-            accessibilityRole="button"
-            accessibilityLabel={`${box.label}: ${count} advances`}
-            style={[styles.countBox, { backgroundColor: tone.background }]}>
-            <Ionicons name={box.icon} size={22} color={tone.text} />
-            <Text style={[styles.countValue, { color: tone.text }]}>
-              {count}
-              {count > 0 ? more : ''}
-            </Text>
-            <Text style={[styles.countLabel, { color: tone.text }]}>{box.label}</Text>
-          </PressableScale>
-        );
-      })}
-    </View>
-  );
-}
-
-function LatestTicket({ ticket }: { ticket: Ticket }) {
-  const styles = useStyles();
-  const formatMoney = useFormatMoney();
-
-  return (
-    <PressableScale
-      haptic="tap"
-      onPress={() => router.push({ pathname: '/ticket/[id]', params: { id: ticket.id } })}
-      accessibilityRole="button"
-      accessibilityLabel={`Latest ${ticket.source === 'RECEIPT' ? 'claim' : 'advance'}, ${ticket.purpose}, ${formatMoney(ticket.amount)}. ${trackerText(ticket.status, true, ticket.source === 'RECEIPT')}`}>
-      <Card>
-        <View style={styles.latestHeader}>
-          <View style={styles.latestText}>
-            <Text style={styles.latestPurpose} numberOfLines={1}>
-              {ticket.purpose}
-            </Text>
-            <Text style={styles.latestMeta}>{formatRelative(ticket.createdAt)}</Text>
-          </View>
-          <Text style={styles.latestAmount}>{formatMoney(ticket.amount)}</Text>
-        </View>
-
-        <TicketTracker
-          status={ticket.status}
-          isMine
-          isBill={ticket.source === 'RECEIPT'}
-          detail={ticket.status === 'REJECTED' ? ticket.rejectionReason : null}
-        />
-      </Card>
-    </PressableScale>
-  );
-}
-
-// Shown before the first ticket, so new users know what happens.
-function HowItWorks() {
-  const styles = useStyles();
-  const colors = useColors();
-  const items: { icon: IconName; text: string }[] = [
-    { icon: 'add', text: 'Need cash before you spend? Request an advance' },
-    { icon: 'camera', text: 'Spent your own money? Make a claim with the bill' },
-    { icon: 'notifications', text: 'We tell you when it is approved and paid' },
-  ];
-  return (
-    <Card>
-      {items.map((item, index) => (
-        <View key={item.text} style={styles.howRow}>
-          <View style={styles.howIcon}>
-            <Ionicons name={item.icon} size={20} color={colors.primary} />
-          </View>
-          <Text style={styles.howText}>
-            {index + 1}. {item.text}
-          </Text>
-        </View>
-      ))}
-    </Card>
   );
 }
 
 const useStyles = createStyles((colors) => ({
-  actions: {
+  pressed: {
+    opacity: 0.75,
+  },
+  // Two per row; an odd last card spans the full width.
+  metrics: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.three,
   },
-  actionTile: {
-    flex: 1,
-    gap: spacing.two,
-    padding: spacing.four,
+  metric: {
+    flexGrow: 1,
+    flexBasis: '45%',
+    minWidth: 0,
+  },
+  metricCard: {
     borderRadius: radius.large,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    backgroundColor: colors.surface,
-  },
-  iconCircleSmall: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primarySoft,
-  },
-  linkTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
-  tile: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.three,
     padding: spacing.three,
-    borderRadius: radius.large,
+    gap: 6,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.borderLight,
-    backgroundColor: colors.surface,
   },
-  tilePrimary: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primary,
+  metricTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  iconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  metricIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primarySoft,
   },
-  iconCirclePrimary: {
-    backgroundColor: '#FFFFFF',
+  metricLabel: {
+    ...typography.overline,
+    color: colors.textMuted,
   },
-  tileText: {
-    flex: 1,
-    gap: spacing.one,
-  },
-  tileTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+  metricValue: {
+    ...typography.title,
+    fontWeight: '800',
     color: colors.textPrimary,
   },
-  tileHint: {
+  metricValueLong: {
     fontSize: 15,
-    color: colors.textSecondary,
   },
-  onPrimary: {
-    color: '#FFFFFF',
+  metricCaption: {
+    ...typography.caption,
+    color: colors.textMuted,
   },
-  onPrimaryMuted: {
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    maxWidth: '100%',
+  },
+  badgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  badgeText: {
+    ...typography.captionStrong,
+    flexShrink: 1,
+  },
+  // Fast Track
+  fastTrack: {
+    borderRadius: radius.large,
+    padding: spacing.four,
+    gap: 6,
+    shadowColor: '#000000',
+    shadowOpacity: 0.2,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 5,
+  },
+  fastTrackHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  fastTrackOverline: {
+    ...typography.overline,
     color: 'rgba(255,255,255,0.85)',
   },
-  counts: {
+  fastTrackTitle: {
+    ...typography.headline,
+    fontSize: 17,
+    color: '#FFFFFF',
+  },
+  fastTrackBody: {
+    ...typography.footnote,
+    color: 'rgba(255,255,255,0.85)',
+  },
+  fastTrackButton: {
+    marginTop: spacing.two,
     flexDirection: 'row',
-    gap: spacing.two,
-  },
-  countBox: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 2,
-    paddingVertical: spacing.three,
-    borderRadius: radius.medium,
-  },
-  countValue: {
-    fontSize: 22,
-    fontWeight: '800',
-  },
-  countLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  latestHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.three,
-  },
-  latestText: {
-    flex: 1,
-  },
-  latestPurpose: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
-  latestMeta: {
-    fontSize: 13,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-  latestAmount: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: colors.textPrimary,
-  },
-  howRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.three,
-  },
-  howIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primarySoft,
+    gap: spacing.two,
+    height: 44,
+    borderRadius: radius.medium,
+    backgroundColor: '#FFFFFF',
   },
-  howText: {
-    flex: 1,
-    fontSize: 15,
-    color: colors.textPrimary,
+  fastTrackButtonOutline: {
+    marginTop: 0,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.7)',
+  },
+  fastTrackButtonText: {
+    ...typography.button,
   },
 }));

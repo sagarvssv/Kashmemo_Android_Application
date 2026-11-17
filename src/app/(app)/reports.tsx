@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
 import { Pressable, Text, View} from 'react-native';
 
@@ -26,8 +27,12 @@ export default function ReportsScreen() {
   const user = useCurrentUser();
   const reports: { value: Report; label: string }[] = [];
   if (can.viewDisbursedReport(user.role)) reports.push({ value: 'payouts', label: 'Payouts' });
-  if (can.viewDailyReport(user.role)) reports.push({ value: 'daily', label: 'Daily tickets' });
-  const [report, setReport] = useState<Report>(reports[0]?.value ?? 'daily');
+  if (can.viewDailyReport(user.role)) reports.push({ value: 'daily', label: 'Daily bills' });
+  // ?view=daily (the Home shortcut) opens on that report when allowed.
+  const { view } = useLocalSearchParams<{ view?: Report }>();
+  const [report, setReport] = useState<Report>(
+    reports.find((option) => option.value === view)?.value ?? reports[0]?.value ?? 'daily',
+  );
 
   return (
     <Screen title="Reports" backFallback="/profile">
@@ -62,7 +67,7 @@ function PayoutsReport() {
               icon="cash-outline"
               tone="highlight"
             />
-            <StatTile label="Tickets paid" value={String(ticketCount)} icon="receipt-outline" />
+            <StatTile label="Bills paid" value={String(ticketCount)} icon="receipt-outline" />
           </StatGrid>
 
           <Section title="By department">
@@ -75,7 +80,7 @@ function PayoutsReport() {
                     key={departmentId}
                     icon="business-outline"
                     title={department.departmentName}
-                    subtitle={`${department.ticketCount} ticket${department.ticketCount === 1 ? '' : 's'}`}
+                    subtitle={`${department.ticketCount} bill${department.ticketCount === 1 ? '' : 's'}`}
                     meta={formatMoney(department.totalAmount)}
                   />
                 ))
@@ -86,7 +91,7 @@ function PayoutsReport() {
       )}
 
       {tickets.data && tickets.data.length > 0 && (
-        <Section title="Paid tickets">
+        <Section title="Paid bills">
           <View style={styles.list}>
             {tickets.data.map((ticket) => (
               <TicketRow key={ticket.id} ticket={ticket} />
@@ -171,12 +176,12 @@ function DailyReport() {
       {report.data && (
         <>
           <StatGrid>
-            <StatTile label="Tickets raised" value={String(totalCount)} icon="receipt-outline" tone="highlight" />
+            <StatTile label="Bills raised" value={String(totalCount)} icon="receipt-outline" tone="highlight" />
             <StatTile label="Total requested" value={formatMoney(totalAmount)} icon="cash-outline" />
           </StatGrid>
 
           {days.length === 0 ? (
-            <EmptyState icon="calendar-outline" title="No tickets in this period" />
+            <EmptyState icon="calendar-outline" title="No bills in this period" />
           ) : (
             days.map((day) => (
               <Card key={day.day}>

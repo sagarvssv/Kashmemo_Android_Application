@@ -68,14 +68,6 @@ export const authApi = {
       { method: 'POST', body: { email }, auth: false },
     ),
 
-  // Checks the reset code without using it up; resetPassword checks it again.
-  verifyResetOtp: (email: string, otp: string) =>
-    request<{ success: boolean; message: string }>('/api/org/verify-reset-otp', {
-      method: 'POST',
-      body: { email, otp },
-      auth: false,
-    }),
-
   resetPassword: (email: string, otp: string, newPassword: string) =>
     request<{ success: boolean; message: string }>('/api/org/reset-password', {
       method: 'POST',
@@ -87,14 +79,32 @@ export const authApi = {
 
   profile: () => request<ApiEnvelope<Profile>>('/api/org/profile'),
 
+  // Only the CEO can delete: the whole organisation, confirmed with an emailed code.
+  requestOrganisationDeletion: () =>
+    request<ApiEnvelope<{ message: string }>>('/api/org/get-otp-delete-org', { method: 'POST' }),
+
+  confirmOrganisationDeletion: (otp: string) =>
+    request<ApiEnvelope<{ message: string }>>('/api/org/verify-otp-delete-org', {
+      method: 'POST',
+      body: { otp },
+    }),
+
   health: () => request<string>('/api/health', { auth: false, responseType: 'text' }),
 };
 
 // ─── Tickets ───
 
 export const ticketApi = {
-  raise: (purpose: string, amount: number) =>
-    request<ApiEnvelope<Ticket>>('/api/emp/raise-ticket', { method: 'POST', body: { purpose, amount } }),
+  // category: one of the bill categories, so reports group advances like bills.
+  raise: (purpose: string, amount: number, category?: string) =>
+    request<ApiEnvelope<Ticket>>('/api/emp/raise-ticket', {
+      method: 'POST',
+      body: category ? { purpose, amount, category } : { purpose, amount },
+    }),
+
+  // How many bills and cash requests the user raised in a month.
+  raisedInMonth: (query: MonthQuery = {}) =>
+    request<ApiEnvelope<{ count: number }>>('/api/emp/my-tickets-this-month', { query }),
 
   // source: 'MANUAL' lists only advances, 'RECEIPT' only bill claims.
   mine: (query: CursorQuery & { status?: TicketStatus; source?: 'MANUAL' | 'RECEIPT' }) =>
@@ -146,6 +156,14 @@ export const advanceApi = {
   addBill: (ticketId: string, invoiceId: string) =>
     request<ApiEnvelope<AdvanceBill>>(`/api/emp/advances/${ticketId}/bills`, { method: 'POST', body: { invoiceId } }),
 
+  // Employee: take back a bill they added (only PENDING or REJECTED, while the
+  // advance is still being spent). The receipt is free to use again.
+  removeBill: (ticketId: string, billId: string) =>
+    request<ApiEnvelope<{ id: string; ticketId: string; invoiceId: string }>>(
+      `/api/emp/advances/${ticketId}/bills/${billId}`,
+      { method: 'DELETE' },
+    ),
+
   // Employee: done spending, send it to finance.
   requestSettlement: (ticketId: string) =>
     request<ApiEnvelope<{ ticket: Ticket; balance: number }>>(`/api/emp/advances/${ticketId}/submit-settlement`, {
@@ -167,7 +185,7 @@ export const advanceApi = {
   // Finance Manager / CEO / HR: advances whose cash is out.
   outstanding: () => request<ApiEnvelope<OutstandingAdvance[]>>('/api/org/advances/outstanding'),
 
-  // Finance Manager, after the cash changed hands.
+  // Finance Manager or CEO, after the cash changed hands (see settlerRolesFor).
   settle: (ticketId: string) => request<ApiEnvelope<Ticket>>(`/api/org/advances/${ticketId}/settle`, { method: 'PATCH' }),
 };
 

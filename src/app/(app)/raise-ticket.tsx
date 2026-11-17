@@ -33,7 +33,7 @@ export default function RaiseTicketScreen() {
     setIsSubmitting(true);
     setError(null);
     try {
-      const { data } = await ticketApi.raise(purpose, parsedAmount);
+      const { data } = await ticketApi.raise(purpose, parsedAmount, category ?? undefined);
       haptics.success();
       router.replace({ pathname: '/ticket/[id]', params: { id: data.id } });
     } catch (err) {
@@ -46,7 +46,7 @@ export default function RaiseTicketScreen() {
 
   return (
     <Screen
-      title="Request an advance"
+      title="Request cash"
       subtitle="Get cash before you spend it. Add the bills later."
       backFallback="/tickets"
       footer={

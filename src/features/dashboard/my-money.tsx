@@ -51,14 +51,14 @@ export function MyMoneySection({ money }: { money: ReturnType<typeof useMyMoney>
   if (waiting.length === 0 && collectTotal === 0 && balance === 0 && !hasOpenAdvance) return null;
 
   return (
-    <Section title="Your own money" action={{ label: 'My claims', onPress: () => router.push('/bills') }}>
+    <Section title="Your own money" action={{ label: 'My bills', onPress: () => router.push('/bills') }}>
       <StatGrid>
         <StatTile
           label="Waiting for approval"
           value={formatMoney(waitingTotal)}
           icon="hourglass-outline"
           onPress={() => router.push({ pathname: '/tickets', params: { scope: 'mine', status: 'PENDING' } })}
-          accessibilityHint="Opens your own tickets waiting for approval"
+          accessibilityHint="Opens your own bills and cash requests waiting for approval"
         />
         <StatTile
           label="Approved · collect from finance"
@@ -73,7 +73,7 @@ export function MyMoneySection({ money }: { money: ReturnType<typeof useMyMoney>
           value={formatMoney(Math.abs(balance))}
           icon="wallet-outline"
           onPress={() => router.push({ pathname: '/wallet', params: { tab: 'advances' } })}
-          accessibilityHint="Opens your open advances"
+          accessibilityHint="Opens your open cash requests"
         />
       </StatGrid>
     </Section>

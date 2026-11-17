@@ -1,71 +1,76 @@
-import { router, type Href } from 'expo-router';
+import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { Text, View } from 'react-native';
 
 import { Card, Section } from '@/components/card';
-import { KpiCard, KpiGrid } from '@/components/kpi-card';
 import { currentMonth, MonthSwitcher } from '@/components/month-switcher';
-import { PressableScale } from '@/components/motion';
 import { Screen } from '@/components/screen';
-import { ProgressBar } from '@/components/stat-tile';
+import { StatGrid, StatTile } from '@/components/stat-tile';
 import { ErrorState, LoadingState } from '@/components/states';
 import { spacing } from '@/constants/theme';
 import { useFormatMoney } from '@/context/currency';
 import { useCurrentUser, useRealtime } from '@/context/session';
 import { createStyles } from '@/context/theme';
+import { AdvanceShortcuts, useAdvanceAttention } from '@/features/advances/advance-attention';
 import { useApi } from '@/hooks/use-api';
-import { dashboardApi } from '@/lib/endpoints';
-import { formatMonth } from '@/lib/format';
+import { dashboardApi, ticketApi } from '@/lib/endpoints';
 import { can } from '@/lib/permissions';
 
-import { AdvanceAttentionChips, useAdvanceAttention } from '@/features/advances/advance-attention';
+import {
+  DailyReportShortcut,
+  DepartmentBudgetRow,
+  DepartmentTicketsPreview,
+  greetingLine,
+  greetingTitle,
+  HomeAvatar,
+  HomeMeta,
+  NotificationBell,
+  RaiseTicketButton,
+  TicketPreviewList,
+} from './shared';
+import { StatusDonut } from './status-donut';
 
-import { AttentionChip, AttentionList, BudgetUsageCard } from './overview-widgets';
-import { greetingSubtitle, greetingTitle, NotificationBell } from './shared';
-import { TicketStatusChart } from './ticket-status-chart';
-
-const TOP_DEPARTMENTS = 3;
-
-// Home for the CEO and HR, built on /dashboard/summary. It's an overview only:
-// ticket lists, activity and department details live in their own tabs and
-// screens, and every number here links to the screen behind it.
+// Home for the CEO and HR, built on /dashboard/summary. Same layout as the iOS
+// app's Home, section for section, in this app's colours and wording.
 export function OrgDashboard() {
   const styles = useStyles();
   const formatMoney = useFormatMoney();
   const user = useCurrentUser();
   const [month, setMonth] = useState(currentMonth);
+  const [refreshToken, setRefreshToken] = useState(0);
 
   const summary = useApi(() => dashboardApi.summary(month), [month]);
+  const pending = useApi(
+    () =>
+      can.viewPendingTickets(user.role)
+        ? dashboardApi.pendingTickets(month).then((r) => r.data.slice(0, 5))
+        : ticketApi.organization({ status: 'PENDING', limit: 5 }).then((r) => r.data),
+    [month, user.role],
+  );
+  const toDisburse = useApi(() => ticketApi.organization({ status: 'APPROVED', limit: 5 }), []);
   const advanceWork = useAdvanceAttention();
 
   useRealtime(['ticket:created', 'ticket:status-update', 'budget:update', 'employee:created'], () => {
     void summary.reload();
+    void pending.reload();
+    void toDisburse.reload();
   });
 
+  const refresh = async () => {
+    setRefreshToken((token) => token + 1);
+    await Promise.all([summary.refresh(), pending.refresh(), toDisburse.refresh(), advanceWork.refresh()]);
+  };
+
   const data = summary.data?.data;
-  const monthLabel = formatMonth(month.month, month.year);
-  // HR can't open Reports, so "Spent" falls back to the department budgets.
-  const spentHref: Href = can.viewReports(user.role) ? '/reports' : '/departments';
-
-  const awaitingApproval = (data?.tickets.PENDING ?? 0) + (data?.tickets.PARTIALLY_APPROVED ?? 0);
-  const readyToDisburse = data?.tickets.APPROVED ?? 0;
-  const unfunded = data?.departments.filter((department) => !department.hasBudgetSet).length ?? 0;
-  const overBudget = data?.departments.filter((department) => department.remaining < 0).length ?? 0;
-  const topSpenders = [...(data?.departments ?? [])]
-    .filter((department) => department.spent > 0)
-    .sort((a, b) => b.spent - a.spent)
-    .slice(0, TOP_DEPARTMENTS);
-
-  const allocated = data?.budget.totalAllocatedBudget ?? 0;
-  const spent = data?.budget.totalSpent ?? 0;
 
   return (
     <Screen
+      overline={greetingLine()}
       title={greetingTitle(user)}
-      subtitle={greetingSubtitle(user)}
+      leading={<HomeAvatar />}
+      meta={<HomeMeta />}
       right={<NotificationBell />}
       refreshing={summary.isRefreshing}
-      onRefresh={summary.refresh}>
+      onRefresh={refresh}>
       <MonthSwitcher value={month} onChange={setMonth} />
 
       {summary.isLoading && !data ? <LoadingState /> : null}
@@ -73,152 +78,77 @@ export function OrgDashboard() {
 
       {data && (
         <>
-          <KpiGrid>
-            <KpiCard
-              icon="wallet-outline"
-              tone="teal"
-              value={formatMoney(data.budget.totalRemaining)}
+          <StatGrid>
+            <StatTile
               label="Budget remaining"
-              link="Budgets"
-              href="/departments"
-              highlight
+              value={formatMoney(data.budget.totalRemaining)}
+              icon="wallet-outline"
+              tone="highlight"
+              onPress={() => router.push('/departments')}
             />
-            <KpiCard
-              icon="trending-up-outline"
-              tone="terracotta"
-              value={formatMoney(spent)}
-              label={`Spent · ${monthLabel}`}
-              link={spentHref === '/reports' ? 'Reports' : 'Budgets'}
-              href={spentHref}
-            />
-            <KpiCard
-              icon="pie-chart-outline"
-              tone="indigo"
-              value={formatMoney(allocated)}
-              label={`Allocated · ${data.totalDepartments} departments`}
-              link="Allocate"
-              href="/departments"
-            />
-            <KpiCard
-              icon="people-outline"
-              tone="blue"
-              value={String(data.totalEmployees)}
+            <StatTile label="Spent" value={formatMoney(data.budget.totalSpent)} icon="trending-up-outline" />
+            <StatTile label="Allocated" value={formatMoney(data.budget.totalAllocatedBudget)} icon="pie-chart-outline" />
+            <StatTile
               label="Employees"
-              link="People"
-              href="/people"
+              value={String(data.totalEmployees)}
+              icon="people-outline"
+              onPress={() => router.push('/people')}
             />
-          </KpiGrid>
+          </StatGrid>
 
-          <BudgetUsageCard allocated={allocated} spent={spent} monthLabel={monthLabel} />
-
-          <AttentionList>
-            <AttentionChip
-              icon="time-outline"
-              count={awaitingApproval}
-              label="awaiting approval"
-              href={{ pathname: '/tickets', params: { scope: 'all', status: 'PENDING' } }}
-            />
-            <AttentionChip
-              icon="cash-outline"
-              count={readyToDisburse}
-              label="ready to disburse"
-              href={{ pathname: '/tickets', params: { scope: 'all', status: 'APPROVED' } }}
-            />
-            {overBudget > 0 && (
-              <AttentionChip
-                icon="alert-circle-outline"
-                count={overBudget}
-                label={overBudget === 1 ? 'department over budget' : 'departments over budget'}
-                href="/departments"
-                danger
-              />
-            )}
-            {unfunded > 0 && (
-              <AttentionChip
-                icon="business-outline"
-                count={unfunded}
-                label={unfunded === 1 ? 'department without budget' : 'departments without budget'}
-                href="/departments"
-              />
-            )}
-            <AdvanceAttentionChips attention={advanceWork} />
-          </AttentionList>
-
-          <Section title="Tickets this month">
-            <TicketStatusChart
+          <Section title="Bills this month">
+            <StatusDonut
               counts={data.tickets}
               onOpenStatus={(status) => router.push({ pathname: '/tickets', params: { scope: 'all', status } })}
             />
           </Section>
 
-          {topSpenders.length > 0 && (
-            <Section title="Top spending departments" action={{ label: 'All', onPress: () => router.push('/departments') }}>
-              <Card style={styles.top}>
-                {topSpenders.map((department) => (
-                  <PressableScale
-                    key={department.departmentId.id}
-                    onPress={() =>
-                      router.push({ pathname: '/department/[id]', params: { id: department.departmentId.id } })
-                    }
-                    accessibilityRole="button"
-                    style={({ pressed }) => [styles.topRow, pressed && styles.pressed]}>
-                    <View style={styles.topHeader}>
-                      <Text style={styles.topName} numberOfLines={1}>
-                        {department.departmentId.name}
-                      </Text>
-                      <Text style={[styles.topAmount, department.remaining < 0 && styles.danger]}>
-                        {formatMoney(department.spent)}
-                        {department.hasBudgetSet ? (
-                          <Text style={styles.topOf}> / {formatMoney(department.totalAllocated)}</Text>
-                        ) : null}
-                      </Text>
-                    </View>
-                    <ProgressBar value={department.spent} max={department.totalAllocated} />
-                  </PressableScale>
+          {data.departments.length > 0 && (
+            <Section
+              title={`Departments (${data.totalDepartments})`}
+              collapsible
+              action={{ label: 'Manage', onPress: () => router.push('/departments') }}>
+              <Card style={styles.departments}>
+                {data.departments.map((status, index) => (
+                  <DepartmentBudgetRow key={status.departmentId.id} status={status} first={index === 0} />
                 ))}
               </Card>
             </Section>
           )}
         </>
       )}
+
+      <DailyReportShortcut />
+
+      <AdvanceShortcuts attention={advanceWork} />
+
+      <DepartmentTicketsPreview refreshToken={refreshToken} />
+
+      <RaiseTicketButton />
+
+      <TicketPreviewList
+        title="Waiting for your approval"
+        collapsible
+        tickets={pending.data}
+        emptyTitle={pending.error ?? (pending.isLoading ? 'Loading…' : 'Nothing waiting for approval')}
+        onSeeAll={() => router.push({ pathname: '/tickets', params: { scope: 'all', status: 'PENDING' } })}
+      />
+
+      <TicketPreviewList
+        title="Approved · ready to disburse"
+        collapsible
+        tickets={toDisburse.data?.data}
+        emptyTitle={toDisburse.error ?? (toDisburse.isLoading ? 'Loading…' : 'No approved bills waiting for payout')}
+        onSeeAll={() => router.push({ pathname: '/tickets', params: { scope: 'all', status: 'APPROVED' } })}
+      />
+
     </Screen>
   );
 }
 
-const useStyles = createStyles((colors) => ({
-  pressed: {
-    opacity: 0.7,
-  },
-  danger: {
-    color: colors.danger,
-  },
-  top: {
-    gap: spacing.one,
-    paddingVertical: spacing.two,
-  },
-  topRow: {
-    gap: 6,
-    paddingVertical: spacing.two,
-  },
-  topHeader: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: spacing.two,
-  },
-  topName: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  topAmount: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
-  topOf: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: colors.textMuted,
+const useStyles = createStyles(() => ({
+  departments: {
+    gap: 0,
+    paddingVertical: spacing.one,
   },
 }));

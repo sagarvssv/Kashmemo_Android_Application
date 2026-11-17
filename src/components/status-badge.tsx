@@ -1,15 +1,17 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { typography } from '@/constants/theme';
 import { useColors, useTheme } from '@/context/theme';
 import { STATUS_LABELS } from '@/lib/format';
 import type { TicketStatus } from '@/lib/types';
 
 export function StatusBadge({ status }: { status: TicketStatus }) {
-  const { statusColors } = useTheme();
+  const { statusColors, statusChartColors } = useTheme();
   const palette = statusColors[status] ?? statusColors.PENDING;
   return (
-    <View style={[styles.badge, { backgroundColor: palette.background }]}>
+    <View style={[styles.badge, styles.statusBadge, { backgroundColor: palette.background }]}>
+      <View style={[styles.dot, { backgroundColor: statusChartColors[status] ?? palette.text }]} />
       <Text style={[styles.label, { color: palette.text }]}>{STATUS_LABELS[status] ?? status}</Text>
     </View>
   );
@@ -31,8 +33,17 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     alignSelf: 'flex-start',
   },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
   label: {
-    fontSize: 12,
-    fontWeight: '600',
+    ...typography.captionStrong,
   },
 });

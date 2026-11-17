@@ -11,13 +11,15 @@ import { ErrorState, InlineError, LoadingState } from '@/components/states';
 import { TicketTracker } from '@/components/ticket-tracker';
 import { categoryLabel } from '@/constants/expense-categories';
 import { spacing } from '@/constants/theme';
+import { useCurrentUser } from '@/context/session';
 import { createStyles, useColors, useTheme } from '@/context/theme';
 import { useApi } from '@/hooks/use-api';
 import { errorMessage } from '@/lib/api';
 import { LOCALE } from '@/lib/config';
-import { formatDate, formatDateTime } from '@/lib/format';
+import { formatDate } from '@/lib/format';
 import { haptics } from '@/lib/haptics';
-import { invoiceApi } from '@/lib/invoices';
+import { invoiceApi, invoiceApiEnabled } from '@/lib/invoices';
+import { can } from '@/lib/permissions';
 import { BILL_STATUS, BillStatusBadge } from '@/features/bills/bill-status';
 import { BillStatusPill } from '@/features/advances/advance-ui';
 import { useBillTickets } from '@/features/bills/bill-tickets';
@@ -29,7 +31,7 @@ const STATUS_TEXT: Record<string, string> = {
   PROCESSING: 'We are reading your bill. This takes about 30 seconds.',
   COMPLETED: 'Your bill was read but not sent yet. Check it and send it.',
   CONFIRMED: 'Your bill was checked.',
-  DUPLICATE: 'This bill was already used. A bill can be claimed only once.',
+  DUPLICATE: 'This bill was already used. A bill can be used only once.',
   FAILED: 'We could not read this bill.',
 };
 
@@ -38,6 +40,10 @@ export default function BillDetailScreen() {
   const colors = useColors();
   const { statusColors } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const user = useCurrentUser();
+  // Employees open own-money bills from the Cash request tab, so the header
+  // says that; other roles open them from My bills.
+  const screenTitle = can.billsTab(user.role) && invoiceApiEnabled ? 'Cash request' : 'Bill';
   const bill = useApi(() => invoiceApi.get(id), [id]);
   const billTickets = useBillTickets();
   const [actionError, setActionError] = useState<string | null>(null);
@@ -57,14 +63,14 @@ export default function BillDetailScreen() {
 
   if (bill.isLoading && !bill.data) {
     return (
-      <Screen title="Bill" backFallback="/bills">
+      <Screen title={screenTitle} backFallback="/bills">
         <LoadingState />
       </Screen>
     );
   }
   if (!bill.data) {
     return (
-      <Screen title="Bill" backFallback="/bills">
+      <Screen title={screenTitle} backFallback="/bills">
         <ErrorState message={bill.error ?? 'Bill not found.'} onRetry={bill.reload} />
       </Screen>
     );
@@ -110,8 +116,8 @@ export default function BillDetailScreen() {
 
   return (
     <Screen
-      title={extracted.vendorName || 'Bill'}
-      subtitle={data.uploadedAt ? `Uploaded ${formatDateTime(data.uploadedAt)}` : undefined}
+      title={screenTitle}
+      subtitle={extracted.vendorName || (data.uploadedAt ? formatDate(data.uploadedAt) : undefined)}
       backFallback="/bills"
       refreshing={bill.isRefreshing}
       onRefresh={() => Promise.all([bill.refresh(), billTickets.refresh()]).then(() => {})}
@@ -132,7 +138,7 @@ export default function BillDetailScreen() {
             />
           ) : advanceBill ? (
             <PrimaryButton
-              label="See the advance"
+              label="See the cash request"
               icon="wallet-outline"
               variant="secondary"
               onPress={() => router.push({ pathname: '/ticket/[id]', params: { id: advanceBill.ticketId } })}
@@ -141,7 +147,7 @@ export default function BillDetailScreen() {
             // Checked but never sent (e.g. sending failed): finish it on the
             // upload screen, where the user picks an advance or their own money.
             <PrimaryButton
-              label="Send my claim"
+              label="Send my bill"
               icon="paper-plane"
               onPress={() => router.push({ pathname: '/upload-bill', params: { invoiceId: data.invoiceId } })}
             />
@@ -167,7 +173,7 @@ export default function BillDetailScreen() {
         {advanceBill ? (
           <View style={styles.advanceBox}>
             <BillStatusPill status={advanceBill.status} />
-            <Text style={styles.advanceText}>Added to your advance &quot;{advanceBill.ticket.purpose}&quot;</Text>
+            <Text style={styles.advanceText}>Added to your cash request &quot;{advanceBill.ticket.purpose}&quot;</Text>
             {advanceBill.status === 'REJECTED' && advanceBill.rejectionReason ? (
               <Text style={styles.note}>Reason: {advanceBill.rejectionReason}</Text>
             ) : null}

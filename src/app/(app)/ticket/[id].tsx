@@ -32,6 +32,9 @@ export default function TicketDetailScreen() {
   const formatMoney = useFormatMoney();
   const { id } = useLocalSearchParams<{ id: string }>();
   const user = useCurrentUser();
+  // Employee tabs: own-money bills are under Cash request, company cash and its
+  // bills under Bills, so the header names the tab the item lives in.
+  const employeeView = can.billsTab(user.role) && invoiceApiEnabled;
   const [sheet, setSheet] = useState<Sheet>(null);
   const [isApproving, setIsApproving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -51,7 +54,7 @@ export default function TicketDetailScreen() {
 
   if (ticket.isLoading && !ticket.data) {
     return (
-      <Screen title="Ticket" backFallback="/tickets">
+      <Screen title="Details" backFallback="/tickets">
         <LoadingState />
       </Screen>
     );
@@ -59,8 +62,8 @@ export default function TicketDetailScreen() {
 
   if (!ticket.data) {
     return (
-      <Screen title="Ticket" backFallback="/tickets">
-        <ErrorState message={ticket.error ?? 'Ticket not found.'} onRetry={ticket.reload} />
+      <Screen title="Details" backFallback="/tickets">
+        <ErrorState message={ticket.error ?? 'Not found.'} onRetry={ticket.reload} />
       </Screen>
     );
   }
@@ -76,6 +79,10 @@ export default function TicketDetailScreen() {
     source: data.source,
   });
   const isBill = data.source === 'RECEIPT';
+  // Past approval by status, so the step is never left blank; the date falls
+  // back to the last single approval if the final one wasn't stored.
+  const approvedDone = ['APPROVED', 'DISBURSED', 'SETTLEMENT_PENDING', 'SETTLED'].includes(data.status);
+  const approvedDate = data.approvedAt ?? data.ceoApprovedAt ?? data.managerApprovedAt;
   const canDisburse = can.disburse(user.role) && data.status === 'APPROVED';
   // An advance whose cash was handed over: bills, settlement and its money.
   const showAdvance = !isBill && ['DISBURSED', 'SETTLEMENT_PENDING', 'SETTLED'].includes(data.status);
@@ -121,7 +128,7 @@ export default function TicketDetailScreen() {
 
   return (
     <Screen
-      title={isBill ? 'Claim' : 'Advance'}
+      title={employeeView ? (isBill ? 'Cash request' : 'Bills') : isBill ? 'Bill' : 'Cash request'}
       subtitle={data.department?.name}
       backFallback="/tickets"
       refreshing={ticket.isRefreshing}
@@ -201,7 +208,7 @@ export default function TicketDetailScreen() {
         </Section>
       ) : null}
 
-      {showAdvance ? <AdvancePanel ticket={data} raiserName={raiserName} onChanged={() => void ticket.reload()} /> : null}
+      {showAdvance ? <AdvancePanel ticket={data} raiserName={raiserName} raiserRole={raiser.data?.role} onChanged={() => void ticket.reload()} /> : null}
 
       <Section title="Details">
         <Card>
@@ -228,7 +235,7 @@ export default function TicketDetailScreen() {
           {data.status === 'REJECTED' ? (
             <TimelineStep label="Rejected" date={data.approvedAt} done danger />
           ) : (
-            <TimelineStep label="Approved" date={data.approvedAt} done={Boolean(data.approvedAt)} />
+            <TimelineStep label="Approved" date={approvedDate} done={approvedDone} />
           )}
           {data.status !== 'REJECTED' && (
             <TimelineStep label={isBill ? 'Paid out' : 'Cash given'} date={data.disbursedAt} done={Boolean(data.disbursedAt)} />
@@ -241,8 +248,8 @@ export default function TicketDetailScreen() {
 
       <PromptModal
         visible={sheet === 'reject'}
-        title="Reject ticket"
-        message="The person who raised this ticket will see your reason."
+        title={isBill ? 'Reject bill' : 'Reject cash request'}
+        message="The person who sent this will see your reason."
         fields={[{ key: 'reason', label: 'Reason', placeholder: 'Why is this being rejected?', multiline: true }]}
         confirmLabel="Reject"
         destructive
@@ -256,10 +263,10 @@ export default function TicketDetailScreen() {
 
       <PromptModal
         visible={sheet === 'disburse'}
-        title={isBill ? 'Confirm payout' : 'Hand over the advance'}
+        title={isBill ? 'Confirm payout' : 'Hand over the cash'}
         message={
           isBill
-            ? "Confirm the recipient's email or phone number. It must match the employee who raised this ticket."
+            ? "Confirm the recipient's email or phone number. It must match the employee who sent this bill."
             : "Confirm who is collecting the cash (email or phone). It goes into their wallet; they then add bills as they spend."
         }
         fields={[
@@ -307,7 +314,7 @@ function TimelineStep({
     <View style={styles.step}>
       <View style={[styles.dot, done && styles.dotDone, danger && styles.dotDanger]} />
       <Text style={[styles.stepLabel, !done && styles.stepPending]}>{label}</Text>
-      <Text style={styles.stepDate}>{done ? formatDateTime(date) : 'Pending'}</Text>
+      <Text style={styles.stepDate}>{done ? (date ? formatDateTime(date) : 'Done') : 'Pending'}</Text>
     </View>
   );
 }

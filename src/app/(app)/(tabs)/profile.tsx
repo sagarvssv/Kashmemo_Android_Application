@@ -78,23 +78,23 @@ export default function ProfileScreen() {
 
       <Section title="Money">
         <Card style={styles.rows}>
+          {/* The CEO doesn't claim money, so has no wallet. */}
           {can.viewWallet(user.role) && (
-            <ListRow icon="wallet-outline" title="My wallet" subtitle="Advance cash and what you're owed" onPress={() => router.push('/wallet')} />
+            <ListRow icon="wallet-outline" title="My wallet" subtitle="Requested cash and what you're owed" onPress={() => router.push('/wallet')} />
           )}
-          <ListRow icon="receipt-outline" title="My claims" subtitle="Your own money spent, paid back" onPress={() => router.push('/bills')} />
           {can.reviewAdvanceBills(user.role) && (
             <ListRow
               icon="checkmark-circle-outline"
               title="Bills to review"
-              subtitle="Bills added to advances"
+              subtitle="Bills added to cash requests"
               onPress={() => router.push('/review-bills')}
             />
           )}
           {can.viewOutstandingAdvances(user.role) && (
             <ListRow
               icon="cash-outline"
-              title="Advances"
-              subtitle={can.settleAdvance(user.role) ? 'Cash out, and advances to settle' : 'Cash given out, not yet settled'}
+              title="Cash requests"
+              subtitle={can.settleAdvance(user.role) ? 'Cash out, and cash requests to settle' : 'Cash given out, not yet settled'}
               onPress={() => router.push('/advances')}
             />
           )}
@@ -110,7 +110,7 @@ export default function ProfileScreen() {
             <ListRow
               icon="bar-chart-outline"
               title="Reports"
-              subtitle="Payouts and daily ticket activity"
+              subtitle="Payouts and daily bill activity"
               onPress={() => router.push('/reports')}
             />
           )}
@@ -128,6 +128,17 @@ export default function ProfileScreen() {
         <Card style={styles.rows}>
           <ListRow icon="key-outline" title="Change password" onPress={changePassword} />
           <ListRow icon="log-out-outline" title="Log out" destructive onPress={confirmSignOut} />
+          {/* Only the CEO can delete: that deletes the whole organisation. Staff
+              accounts belong to the organisation, which removes them from People. */}
+          {user.role === 'CEO' ? (
+            <ListRow
+              icon="trash-outline"
+              title="Delete organisation"
+              subtitle="Delete the company and all its data"
+              destructive
+              onPress={() => router.push('/delete-account')}
+            />
+          ) : null}
         </Card>
       </Section>
     </Screen>

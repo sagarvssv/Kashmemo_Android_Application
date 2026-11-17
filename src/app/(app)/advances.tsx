@@ -14,12 +14,12 @@ import { AdvanceCard } from '@/features/advances/advance-ui';
 import { useApi } from '@/hooks/use-api';
 import { advanceApi } from '@/lib/endpoints';
 import { formatDate } from '@/lib/format';
-import { can } from '@/lib/permissions';
+import { can, canSettleAdvanceOf } from '@/lib/permissions';
 import type { OutstandingAdvance } from '@/lib/types';
 
 // Advances whose cash is out: waiting to settle first (finance acts on
 // those), then those still being spent. Each opens the advance, where the
-// Finance Manager settles it.
+// Finance Manager or CEO settles it (the CEO for a Finance Manager's own).
 export default function AdvancesRoute() {
   const user = useCurrentUser();
   if (!can.viewOutstandingAdvances(user.role)) return <Redirect href="/home" />;
@@ -44,7 +44,7 @@ function AdvancesScreen() {
 
   return (
     <Screen
-      title="Advances"
+      title="Cash requests"
       subtitle="Cash given out and not yet settled"
       backFallback="/home"
       refreshing={advances.isRefreshing}
@@ -60,7 +60,7 @@ function AdvancesScreen() {
             <StatTile label="Still being spent" value={formatMoney(cashOut)} icon="time-outline" />
           </StatGrid>
 
-          {list.length === 0 ? <EmptyState icon="checkmark-done-outline" title="No advances out right now" /> : null}
+          {list.length === 0 ? <EmptyState icon="checkmark-done-outline" title="No cash requests out right now" /> : null}
 
           {toSettle.length > 0 ? (
             <Section title={`Ready to settle (${toSettle.length})`}>
@@ -91,8 +91,11 @@ function OutstandingCard({ advance }: { advance: OutstandingAdvance }) {
   const styles = useStyles();
   const colors = useColors();
   const formatMoney = useFormatMoney();
+  const user = useCurrentUser();
   const ready = advance.status === 'SETTLEMENT_PENDING';
   const who = advance.employee?.name ?? 'Employee';
+  const raiserRole = advance.employee?.role ?? 'EMPLOYEE';
+  const mineToSettle = canSettleAdvanceOf(user.role, raiserRole, advance.raisedBy === user.userId);
   return (
     <AdvanceCard
       id={advance.id}
@@ -107,7 +110,11 @@ function OutstandingCard({ advance }: { advance: OutstandingAdvance }) {
       footer={
         ready ? (
           <Text style={[styles.action, { color: advance.toPay > 0 ? colors.danger : colors.success }]}>
-            {advance.pendingBills > 0
+            {!mineToSettle
+              ? raiserRole === 'FINANCE_MANAGER'
+                ? 'Waiting for the CEO to settle'
+                : 'Waiting for finance to settle'
+              : advance.pendingBills > 0
               ? `Review ${advance.pendingBills === 1 ? 'the waiting bill' : `${advance.pendingBills} waiting bills`} before settling`
               : advance.toReturn > 0
                 ? `Collect ${formatMoney(advance.toReturn)} from ${who}, then settle`

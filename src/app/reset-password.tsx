@@ -36,6 +36,8 @@ export default function ResetPasswordScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // The code is checked here, so a wrong or expired one needs a way back.
+  const [codeProblem, setCodeProblem] = useState(false);
 
   const rulesPassed = RULES.every((rule) => rule.test(password));
   const passwordsMatch = password.length > 0 && password === confirmPassword;
@@ -45,6 +47,7 @@ export default function ResetPasswordScreen() {
     if (!canSubmit || !email || !otp) return;
     setIsSubmitting(true);
     setError(null);
+    setCodeProblem(false);
     try {
       const result = await authApi.resetPassword(email, otp, password);
       // Leave the whole recovery flow (forgot password → code → new password)
@@ -61,7 +64,9 @@ export default function ResetPasswordScreen() {
         Alert.alert('Password updated', `${result.message}\n\nLog in with your new password.`);
       }
     } catch (err) {
-      setError(errorMessage(err));
+      const message = errorMessage(err);
+      setError(message);
+      setCodeProblem(/otp|code/i.test(message));
     } finally {
       setIsSubmitting(false);
     }
@@ -116,6 +121,11 @@ export default function ResetPasswordScreen() {
         </View>
 
         <InlineError message={error} />
+        {codeProblem ? (
+          <Pressable onPress={() => goBackOrReplace('/forgot-password')} hitSlop={8}>
+            <Text style={styles.codeLink}>Enter the code again or get a new one</Text>
+          </Pressable>
+        ) : null}
 
         <PrimaryButton label="Reset Password" onPress={handleReset} disabled={!canSubmit} loading={isSubmitting} />
       </View>
@@ -164,5 +174,10 @@ const useStyles = createStyles((colors) => ({
   },
   ruleLabelPassed: {
     color: colors.success,
+  },
+  codeLink: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
   },
 }));

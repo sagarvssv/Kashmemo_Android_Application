@@ -51,8 +51,8 @@ export function TicketStatusChart({ counts, onOpenStatus }: TicketStatusChartPro
             <Text style={styles.headlineValue}>{total}</Text>
             <Text style={styles.headlineLabel}>
               {total === 0
-                ? 'No tickets raised this month'
-                : `${total === 1 ? 'ticket' : 'tickets'} raised · tap a status for details`}
+                ? 'No bills raised this month'
+                : `${total === 1 ? 'bill' : 'bills'} raised · tap a status for details`}
             </Text>
           </>
         )}
@@ -90,7 +90,7 @@ export function TicketStatusChart({ counts, onOpenStatus }: TicketStatusChartPro
               onPress={() => toggle(status)}
               accessibilityRole="button"
               accessibilityState={{ selected: isSelected }}
-              accessibilityLabel={`${STATUS_LABELS[status]}: ${count} tickets, ${percent(count, total)}`}
+              accessibilityLabel={`${STATUS_LABELS[status]}: ${count} bills, ${percent(count, total)}`}
               style={({ pressed }) => [
                 styles.row,
                 isSelected && styles.rowSelected,
@@ -120,7 +120,7 @@ export function TicketStatusChart({ counts, onOpenStatus }: TicketStatusChartPro
 
       {selected && selectedCount > 0 && (
         <PressableScale haptic="select" onPress={() => onOpenStatus(selected)} style={styles.viewLink} accessibilityRole="link">
-          <Text style={styles.viewLinkText}>View {STATUS_LABELS[selected].toLowerCase()} tickets</Text>
+          <Text style={styles.viewLinkText}>View {STATUS_LABELS[selected].toLowerCase()} bills</Text>
           <Ionicons name="arrow-forward" size={16} color={colors.primary} />
         </PressableScale>
       )}
@@ -132,7 +132,7 @@ function barDescription(counts: Partial<Record<TicketStatus, number>>, total: nu
   const parts = STATUSES.filter((status) => (counts[status] ?? 0) > 0).map(
     (status) => `${STATUS_LABELS[status]} ${counts[status]}`,
   );
-  return `${total} tickets this month: ${parts.join(', ')}`;
+  return `${total} bills this month: ${parts.join(', ')}`;
 }
 
 const useStyles = createStyles((colors) => ({

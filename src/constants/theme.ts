@@ -235,3 +235,32 @@ export const radius = {
   medium: 12,
   large: 16,
 };
+
+// Type scale (same roles as the iOS app), so sizes, weights, line heights and
+// letter spacing stay consistent across both apps.
+export const typography = {
+  display: { fontSize: 28, fontWeight: '800', lineHeight: 34, letterSpacing: -0.7 },
+  largeTitle: { fontSize: 23, fontWeight: '800', lineHeight: 28, letterSpacing: -0.5 },
+  title: { fontSize: 19, fontWeight: '700', lineHeight: 24, letterSpacing: -0.3 },
+  headline: { fontSize: 15, fontWeight: '700', lineHeight: 20, letterSpacing: -0.1 },
+  button: { fontSize: 15, fontWeight: '600', lineHeight: 19, letterSpacing: 0.1 },
+  bodyStrong: { fontSize: 14, fontWeight: '600', lineHeight: 19, letterSpacing: -0.1 },
+  body: { fontSize: 14, fontWeight: '400', lineHeight: 20, letterSpacing: -0.1 },
+  calloutStrong: { fontSize: 13, fontWeight: '600', lineHeight: 18 },
+  callout: { fontSize: 13, fontWeight: '400', lineHeight: 18 },
+  footnoteStrong: { fontSize: 12, fontWeight: '600', lineHeight: 16 },
+  footnote: { fontSize: 12, fontWeight: '400', lineHeight: 16 },
+  captionStrong: { fontSize: 11, fontWeight: '600', lineHeight: 14, letterSpacing: 0.2 },
+  caption: { fontSize: 11, fontWeight: '400', lineHeight: 14, letterSpacing: 0.1 },
+  micro: { fontSize: 10, fontWeight: '600', lineHeight: 12, letterSpacing: 0.3 },
+  // Small uppercase labels above values (stat tiles, overlines).
+  overline: { fontSize: 10, fontWeight: '700', lineHeight: 13, letterSpacing: 0.8, textTransform: 'uppercase' },
+} as const;
+
+// Soft round badge behind an icon: the #RRGGBB color at ~12% opacity.
+export function iconBadge(tint: string) {
+  return /^#[0-9a-fA-F]{6}$/.test(tint) ? `${tint}1F` : tint;
+}
+
+// Bottom padding for scrolling content so the floating tab bar never covers it.
+export const TAB_BAR_CLEARANCE = 112;

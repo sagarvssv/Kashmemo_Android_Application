@@ -10,7 +10,7 @@ import { Screen } from '@/components/screen';
 import { EmptyState, ErrorState, LoadingState } from '@/components/states';
 import { Tag } from '@/components/status-badge';
 import { TextField } from '@/components/text-field';
-import { radius, spacing } from '@/constants/theme';
+import { radius, spacing, TAB_BAR_CLEARANCE } from '@/constants/theme';
 import { useCurrentUser, useRealtime } from '@/context/session';
 import { createStyles, useColors } from '@/context/theme';
 import { useApi } from '@/hooks/use-api';
@@ -352,7 +352,7 @@ const useStyles = createStyles((colors) => ({
   },
   list: {
     paddingHorizontal: spacing.four,
-    paddingBottom: spacing.eight,
+    paddingBottom: TAB_BAR_CLEARANCE,
   },
   separator: {
     height: spacing.two,

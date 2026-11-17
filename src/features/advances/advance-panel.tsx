@@ -16,26 +16,30 @@ import { createStyles, useColors } from '@/context/theme';
 import { useApi } from '@/hooks/use-api';
 import { errorMessage } from '@/lib/api';
 import { advanceApi } from '@/lib/endpoints';
-import { formatDate, toAmount } from '@/lib/format';
+import { formatDate, formatDateTime, toAmount } from '@/lib/format';
 import { haptics } from '@/lib/haptics';
 import { invoiceApi, invoiceApiEnabled } from '@/lib/invoices';
-import { can } from '@/lib/permissions';
-import type { AdvanceBill, Ticket } from '@/lib/types';
+import { can, canSettleAdvanceOf } from '@/lib/permissions';
+import type { AdvanceBill, Ticket, UserRole } from '@/lib/types';
 
 import { AdvanceMoney, BillStatusPill, WalletTxnRow } from './advance-ui';
 
 // An advance after its cash was handed over: the money, the bills added
 // against it, and the next step for whoever is looking:
-//   employee (DISBURSED)            → add bills, or "I'm done" (send for settlement)
+//   employee (DISBURSED)            → add or remove bills, or "I'm done" (send for settlement)
 //   Manager / FM / CEO              → approve or reject each waiting bill
-//   Finance Manager (SETTLEMENT_PENDING) → settle: collect what's left / pay the overspend
+//   Finance Manager or CEO (SETTLEMENT_PENDING) → settle: collect what's left / pay the overspend
+//     (a Finance Manager's own advance is settled by the CEO)
 export function AdvancePanel({
   ticket,
   raiserName,
+  raiserRole,
   onChanged,
 }: {
   ticket: Ticket;
   raiserName?: string;
+  // Decides who may settle (settlerRolesFor).
+  raiserRole?: UserRole;
   // Called after anything here changed the ticket, so the screen reloads it.
   onChanged: () => void;
 }) {
@@ -56,7 +60,10 @@ export function AdvancePanel({
   const isMine = ticket.raisedBy === user.userId;
   const open = ticket.status === 'DISBURSED' || ticket.status === 'SETTLEMENT_PENDING';
   const canReview = !isMine && open && can.reviewAdvanceBills(user.role);
-  const canSettle = !isMine && ticket.status === 'SETTLEMENT_PENDING' && can.settleAdvance(user.role);
+  const canSettle = ticket.status === 'SETTLEMENT_PENDING' && canSettleAdvanceOf(user.role, raiserRole, isMine);
+  // Who closes the user's own advance: the CEO for a Finance Manager.
+  const closer = isMine && user.role === 'FINANCE_MANAGER' ? 'the CEO' : 'finance';
+  const canRemoveBills = isMine && ticket.status === 'DISBURSED';
 
   const data = details.data;
   const bills = data?.bills ?? [];
@@ -86,10 +93,10 @@ export function AdvancePanel({
   const handleRequestSettlement = () => {
     const outcome =
       balance > 0
-        ? `You will give back ${formatMoney(balance)} of unspent cash to finance.`
+        ? `You will give back ${formatMoney(balance)} of unspent cash to ${closer}.`
         : balance < 0
-          ? `Finance will pay you ${formatMoney(-balance)} that you spent over the advance.`
-          : 'The advance is fully spent, so no cash changes hands.';
+          ? `${closer === 'finance' ? 'Finance' : 'The CEO'} will pay you ${formatMoney(-balance)} that you spent over the request.`
+          : 'The cash is fully spent, so no cash changes hands.';
     const warning = pendingBills
       ? `\n\n${pendingBills === 1 ? '1 bill is' : `${pendingBills} bills are`} still waiting for approval. You can't add more bills after this.`
       : "\n\nYou can't add more bills after this.";
@@ -107,10 +114,22 @@ export function AdvancePanel({
         ? `Collect ${formatMoney(balance)} of unspent cash from ${name}.`
         : balance < 0
           ? `Pay ${formatMoney(-balance)} to ${name} for the overspend.`
-          : 'Nothing to collect or pay. This closes the advance.';
-    Alert.alert('Settle this advance?', `${step}\n\nOnly settle after the cash has changed hands.`, [
+          : 'Nothing to collect or pay. This closes the cash request.';
+    Alert.alert('Settle this cash request?', `${step}\n\nOnly settle after the cash has changed hands.`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Settle', onPress: () => void run('settle', () => advanceApi.settle(ticket.id)) },
+    ]);
+  };
+
+  // Added the wrong bill? Take it back while it isn't approved yet.
+  const handleRemoveBill = (bill: AdvanceBill) => {
+    Alert.alert('Remove this bill?', 'It is taken off this cash request. You can add it again later.', [
+      { text: 'Keep it', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => void run(`remove:${bill.id}`, () => advanceApi.removeBill(ticket.id, bill.id)),
+      },
     ]);
   };
 
@@ -138,7 +157,7 @@ export function AdvancePanel({
 
   return (
     <>
-      <Section title="Advance money">
+      <Section title="Requested cash">
         <Card>
           <AdvanceMoney amount={data.amount} spentAmount={data.spentAmount ?? 0} pendingBills={pendingBills} />
 
@@ -150,16 +169,16 @@ export function AdvancePanel({
                   ? `Settled: ${formatMoney(settled)} of unspent cash was returned.`
                   : settled < 0
                     ? `Settled: finance paid ${formatMoney(-settled)} for the overspend.`
-                    : 'Settled: the advance was fully spent.'
+                    : 'Settled: the cash was fully spent.'
                 : balance > 0
                   ? isMine
                     ? `${formatMoney(balance)} of this cash is not covered by approved bills yet.`
-                    : `${who} has ${formatMoney(balance)} of advance cash not yet backed by approved bills.`
+                    : `${who} has ${formatMoney(balance)} of requested cash not yet backed by approved bills.`
                   : balance < 0
-                    ? `Finance owes ${who} ${formatMoney(-balance)} for spending over the advance.`
+                    ? `Finance owes ${who} ${formatMoney(-balance)} for spending over the request.`
                     : isMine
                       ? 'Your approved bills cover all of this cash.'
-                      : 'Every bit of this advance is backed by approved bills.'}
+                      : 'Every bit of this cash is backed by approved bills.'}
             </Text>
             {isMine && ticket.status === 'DISBURSED' ? (
               <Text style={styles.outcomeHint}>
@@ -171,10 +190,10 @@ export function AdvancePanel({
               <Text style={styles.outcomeHint}>
                 {isMine
                   ? balance > 0
-                    ? `Give ${formatMoney(balance)} back to finance. Then they close the advance.`
+                    ? `Give ${formatMoney(balance)} back to ${closer}. Then they close the request.`
                     : balance < 0
-                      ? `Finance will pay you ${formatMoney(-balance)}, then close the advance.`
-                      : 'Waiting for finance to close the advance.'
+                      ? `${closer === 'finance' ? 'Finance' : 'The CEO'} will pay you ${formatMoney(-balance)}, then close the request.`
+                      : `Waiting for ${closer} to close the request.`
                   : 'Sent for settlement.'}
               </Text>
             ) : null}
@@ -212,7 +231,7 @@ export function AdvancePanel({
                     ? `Settle · collect ${formatMoney(balance)}`
                     : balance < 0
                       ? `Settle · pay ${formatMoney(-balance)}`
-                      : 'Settle · close the advance'
+                      : 'Settle · close the request'
                 }
                 icon="checkmark-done-outline"
                 onPress={handleSettle}
@@ -226,7 +245,7 @@ export function AdvancePanel({
         </Card>
       </Section>
 
-      <Section title={bills.length ? `Bills for this advance (${bills.length})` : 'Bills for this advance'}>
+      <Section title={bills.length ? `Bills for this request (${bills.length})` : 'Bills for this request'}>
         {bills.length === 0 ? (
           <Card>
             <Text style={styles.hint}>
@@ -252,7 +271,14 @@ export function AdvancePanel({
                   </View>
                   <Text style={styles.billAmount}>{formatMoney(bill.amount)}</Text>
                 </View>
-                <BillStatusPill status={bill.status} />
+                <View style={styles.billStatusRow}>
+                  <BillStatusPill status={bill.status} />
+                  {bill.status !== 'PENDING' && bill.reviewedAt ? (
+                    <Text style={styles.hint}>
+                      {bill.status === 'APPROVED' ? 'Approved' : 'Rejected'} {formatDateTime(bill.reviewedAt)}
+                    </Text>
+                  ) : null}
+                </View>
                 {bill.status === 'REJECTED' && bill.rejectionReason ? (
                   <Text style={styles.reason}>Reason: {bill.rejectionReason}</Text>
                 ) : null}
@@ -265,6 +291,19 @@ export function AdvancePanel({
                       accessibilityLabel="View the bill"
                       style={styles.link}>
                       <Text style={styles.linkText}>{busy === `file:${bill.id}` ? 'Opening…' : 'View the bill'}</Text>
+                    </PressableScale>
+                  ) : null}
+                  {canRemoveBills && (bill.status === 'PENDING' || bill.status === 'REJECTED') ? (
+                    <PressableScale
+                      haptic="tap"
+                      onPress={() => handleRemoveBill(bill)}
+                      disabled={busy !== null}
+                      accessibilityRole="button"
+                      accessibilityLabel="Remove this bill"
+                      style={styles.link}>
+                      <Text style={[styles.linkText, { color: colors.danger }]}>
+                        {busy === `remove:${bill.id}` ? 'Removing…' : 'Remove'}
+                      </Text>
                     </PressableScale>
                   ) : null}
                 </View>
@@ -376,8 +415,15 @@ const useStyles = createStyles((colors) => ({
     fontSize: 13,
     color: colors.danger,
   },
+  billStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.two,
+  },
   billActions: {
     flexDirection: 'row',
+    gap: spacing.four,
   },
   link: {
     minHeight: 32,

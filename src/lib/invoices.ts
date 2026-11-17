@@ -11,7 +11,7 @@ export type InvoiceStatus = 'UPLOAD_PENDING' | 'PROCESSING' | 'COMPLETED' | 'DUP
 
 export type InvoiceContentType = 'image/jpeg' | 'image/png' | 'application/pdf';
 
-// The nine categories the AI picks from; PUT accepts only these exact names.
+// The ten categories the AI picks from; PUT accepts only these exact names.
 export type InvoiceCategory =
   | 'Electronics'
   | 'Logistics & Courier'
@@ -21,6 +21,7 @@ export type InvoiceCategory =
   | 'Repairs & Maintenance'
   | 'Utilities & Telecom'
   | 'Accommodation'
+  | 'Government & Admin Fees'
   | 'Miscellaneous';
 
 export type InvoiceLineItem = {
@@ -44,6 +45,29 @@ export type InvoiceFields = {
   notes: string | null;
 };
 
+// A rule check the reader ran on the bill, e.g. subtotal + tax ≠ total.
+// Warnings never block a bill; they clear once the values are corrected.
+export type InvoiceWarningCode =
+  | 'TOTAL_MISMATCH'
+  | 'LINE_ITEMS_MISMATCH'
+  | 'LINE_ITEM_MATH'
+  | 'VAT_RATE'
+  | 'AMOUNT_IN_WORDS_MISMATCH'
+  | 'FUTURE_DATE'
+  | 'TOTAL_NOT_POSITIVE'
+  | 'LOW_CONFIDENCE';
+export type InvoiceWarning = { code: InvoiceWarningCode | (string & {}); message: string };
+
+// Fields the reader reports how sure it is about.
+export type InvoiceConfidenceField =
+  | 'invoiceNumber'
+  | 'invoiceDate'
+  | 'vendorName'
+  | 'vendorTaxId'
+  | 'subtotal'
+  | 'taxAmount'
+  | 'totalAmount';
+
 export type Invoice = {
   invoiceId: string;
   status: InvoiceStatus;
@@ -59,6 +83,14 @@ export type Invoice = {
   categoryReason?: string;
   needsReview?: boolean;
   missingFields?: string[];
+  // How well the reader could read the bill.
+  validationWarnings?: InvoiceWarning[];
+  lowConfidenceFields?: InvoiceConfidenceField[];
+  fieldConfidence?: Partial<Record<InvoiceConfidenceField, number>>;
+  isHandwritten?: boolean;
+  amountInWords?: string | null;
+  amountInWordsMatches?: boolean | null;
+  categorySource?: 'USER' | 'AI';
   possibleDuplicateOf?: string;
   duplicateOf?: string;
   duplicateReason?: 'SAME_FILE' | 'SAME_VENDOR_AND_INVOICE_NUMBER';
@@ -113,7 +145,12 @@ async function call<T>(path: string, init: { method?: 'GET' | 'POST' | 'PUT'; bo
     // Some responses have an empty body.
   }
   if (!response.ok) {
-    const message = (parsed as { error?: string } | null)?.error ?? `Bill reader error (${response.status}).`;
+    const raw = (parsed as { error?: string } | null)?.error;
+    // A bill the reader doesn't know (e.g. removed, or an unknown id): say so plainly.
+    const message =
+      response.status === 404 || /invalid invoice ?id|not found/i.test(raw ?? '')
+        ? 'This bill could not be found in the bill reader.'
+        : raw ?? `Bill reader error (${response.status}).`;
     throw new ApiError(response.status, message, parsed);
   }
   return parsed as T;

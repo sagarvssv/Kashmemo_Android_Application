@@ -1,8 +1,8 @@
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 
+import { BRAND_GREEN_DARK, BrandLogo } from '@/components/brand-logo';
 import { useSession } from '@/context/session';
 import { createStyles } from '@/context/theme';
 
@@ -28,13 +28,17 @@ export default function SplashScreen() {
 
   useEffect(() => {
     if (!isReady || !minTimeElapsed) return;
-    router.replace(user ? '/home' : '/login');
+    router.replace(user ? '/home' : '/welcome');
   }, [isReady, minTimeElapsed, user]);
+
+  // After sign-in or sign-out this route is only passed through on the way to
+  // Home or Welcome, so show a plain background instead of flashing the splash.
+  if (hasShownSplash) return <View style={styles.passThrough} />;
 
   return (
     <View style={styles.container}>
       <View style={styles.logoMark}>
-        <Ionicons name="leaf" size={40} color="#FFFFFF" />
+        <BrandLogo size={88} />
       </View>
       <Text style={styles.title}>KashMemo</Text>
       <Text style={styles.tagline}>Raise. Track. Get Paid.</Text>
@@ -43,19 +47,23 @@ export default function SplashScreen() {
 }
 
 const useStyles = createStyles((colors) => ({
+  passThrough: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   container: {
     flex: 1,
-    backgroundColor: colors.primaryDark,
+    backgroundColor: BRAND_GREEN_DARK,
     alignItems: 'center',
     justifyContent: 'center',
   },
   logoMark: {
-    width: 84,
-    height: 84,
-    borderRadius: 20,
-    backgroundColor: colors.accentTeal,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 24,
+    shadowColor: '#000000',
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
     marginBottom: 20,
   },
   title: {

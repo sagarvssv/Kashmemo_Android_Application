@@ -13,6 +13,7 @@ export const EXPENSE_CATEGORIES: { label: string; value: InvoiceCategory; icon: 
   { label: 'Courier', value: 'Logistics & Courier', icon: 'cube-outline' },
   { label: 'Phone & bills', value: 'Utilities & Telecom', icon: 'call-outline' },
   { label: 'Hotel', value: 'Accommodation', icon: 'bed-outline' },
+  { label: 'Govt fees', value: 'Government & Admin Fees', icon: 'business-outline' },
   { label: 'Other', value: 'Miscellaneous', icon: 'ellipsis-horizontal-circle-outline' },
 ];
 

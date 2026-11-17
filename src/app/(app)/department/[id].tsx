@@ -69,7 +69,7 @@ export default function DepartmentDetailScreen() {
       )}
 
       {canSeeTickets && (
-        <Section title="Recent tickets">
+        <Section title="Recent bills">
           {tickets.data && tickets.data.length > 0 ? (
             <View style={styles.list}>
               {tickets.data.map((ticket) => (
@@ -78,7 +78,7 @@ export default function DepartmentDetailScreen() {
             </View>
           ) : (
             <Card>
-              <EmptyState icon="receipt-outline" title={tickets.error ?? 'No tickets yet'} />
+              <EmptyState icon="receipt-outline" title={tickets.error ?? 'No bills yet'} />
             </Card>
           )}
         </Section>

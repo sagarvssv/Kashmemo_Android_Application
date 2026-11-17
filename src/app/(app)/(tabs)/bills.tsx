@@ -1,14 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
+import { ChipGroup } from '@/components/chip-group';
 import { Appear, PressableScale } from '@/components/motion';
 import { PrimaryButton } from '@/components/primary-button';
 import { Screen } from '@/components/screen';
 import { EmptyState, ErrorState, LoadingState } from '@/components/states';
 import { categoryLabel } from '@/constants/expense-categories';
-import { radius, spacing } from '@/constants/theme';
+import { radius, spacing, TAB_BAR_CLEARANCE } from '@/constants/theme';
 import { useFormatMoney } from '@/context/currency';
 import { useCurrentUser } from '@/context/session';
 import { createStyles, useColors, useTheme } from '@/context/theme';
@@ -39,6 +40,26 @@ function stageOf(bill: InvoiceSummary, { ticket }: Claim): Stage {
   return 'finish';
 }
 
+// Filter tabs by approval status (the same names as everywhere else), plus
+// "Not sent" for bills uploaded but not yet sent for approval.
+type Filter = 'ALL' | 'NOT_SENT' | 'PENDING' | 'PARTIALLY_APPROVED' | 'APPROVED' | 'DISBURSED' | 'REJECTED';
+const FILTERS: { value: Filter; label: string }[] = [
+  { value: 'ALL', label: 'All' },
+  { value: 'NOT_SENT', label: 'Not sent' },
+  { value: 'PENDING', label: STATUS_LABELS.PENDING },
+  { value: 'PARTIALLY_APPROVED', label: STATUS_LABELS.PARTIALLY_APPROVED },
+  { value: 'APPROVED', label: STATUS_LABELS.APPROVED },
+  { value: 'DISBURSED', label: STATUS_LABELS.DISBURSED },
+  { value: 'REJECTED', label: STATUS_LABELS.REJECTED },
+];
+
+function filterOf(_bill: InvoiceSummary, { ticket }: Claim): Exclude<Filter, 'ALL'> {
+  if (!ticket) return 'NOT_SENT';
+  // A claim never goes past Disbursed; anything else counts as waiting.
+  if (ticket.status === 'SETTLED' || ticket.status === 'SETTLEMENT_PENDING') return 'DISBURSED';
+  return ticket.status;
+}
+
 // Three boxes summing up the bills shown.
 const SUMMARY: { label: string; icon: IconName; tone: TicketStatus; stage: Stage }[] = [
   { label: 'Sent', icon: 'paper-plane-outline', tone: 'APPROVED', stage: 'sent' },
@@ -48,14 +69,15 @@ const SUMMARY: { label: string; icon: IconName; tone: TicketStatus; stage: Stage
 
 // Bills the user paid with their own money, to get it back, newest first. A
 // tab for employees (see can.billsTab); other roles reach it from Home or More.
-// Bills paid with advance cash live on their advance instead, so each bill is
-// in exactly one place; a link at the top points there.
+// Only own-money bills are here: bills for company cash live on their cash
+// request (Bills tab), so each tab holds one kind of bill and nothing mixes.
 export default function BillsScreen() {
   const styles = useStyles();
   const colors = useColors();
   const user = useCurrentUser();
   const isTab = can.billsTab(user.role);
   const billTickets = useBillTickets();
+  const [filter, setFilter] = useState<Filter>('ALL');
   const claimOf = (invoiceId: string): Claim => ({ ticket: billTickets.byInvoice.get(invoiceId) });
   const bills = useCursorList<InvoiceSummary>(
     (cursor) =>
@@ -67,12 +89,24 @@ export default function BillsScreen() {
     [user.userId],
   );
   const ownBills = bills.items.filter((bill) => !billTickets.onAdvance.has(bill.invoiceId));
-  const onAdvanceCount = bills.items.length - ownBills.length;
+
+  const counts = new Map<Filter, number>([['ALL', ownBills.length]]);
+  for (const bill of ownBills) {
+    const key = filterOf(bill, claimOf(bill.invoiceId));
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  // Only tabs with bills in them (plus All and the one chosen), with counts.
+  const filterOptions = FILTERS.filter(
+    (option) => option.value === 'ALL' || option.value === filter || (counts.get(option.value) ?? 0) > 0,
+  ).map((option) => ({ value: option.value, label: `${option.label} (${counts.get(option.value) ?? 0})` }));
+  const shownBills =
+    filter === 'ALL' ? ownBills : ownBills.filter((bill) => filterOf(bill, claimOf(bill.invoiceId)) === filter);
+  const filterLabel = FILTERS.find((option) => option.value === filter)?.label ?? 'All';
 
   return (
     <Screen
-      title="My claims"
-      subtitle="Paid with your own money? Get it back"
+      title={can.billsTab(user.role) ? 'Cash request' : 'My bills'}
+      subtitle="Spent your own money"
       backFallback={isTab ? undefined : '/home'}
       scroll={false}>
       {!invoiceApiEnabled ? (
@@ -83,7 +117,7 @@ export default function BillsScreen() {
         <ErrorState message={bills.error} onRetry={bills.reload} />
       ) : (
         <FlatList
-          data={ownBills}
+          data={shownBills}
           keyExtractor={(item) => item.invoiceId}
           contentContainerStyle={styles.list}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -94,14 +128,28 @@ export default function BillsScreen() {
             />
           }
           ListHeaderComponent={
-            <Header bills={ownBills} hasMore={bills.hasMore} claimOf={claimOf} onAdvanceCount={onAdvanceCount} />
+            <Header
+              bills={ownBills}
+              hasMore={bills.hasMore}
+              claimOf={claimOf}
+              filters={
+                ownBills.length > 0 && filterOptions.length > 2 ? (
+                  <ChipGroup options={filterOptions} value={filter} onChange={setFilter} />
+                ) : null
+              }
+              listTitle={filter === 'ALL' ? undefined : `${filterLabel} bills`}
+            />
           }
           ListEmptyComponent={
-            <EmptyState
-              icon="receipt-outline"
-              title="No claims yet"
-              message="Spent your own money for work? Take a photo of the bill and get the money back."
-            />
+            filter !== 'ALL' && ownBills.length > 0 ? (
+              <EmptyState icon="filter-outline" title={`No ${filterLabel.toLowerCase()} bills`} />
+            ) : (
+              <EmptyState
+                icon="receipt-outline"
+                title="No bills yet"
+                message="Spent your own money for work? Take a photo of the bill and get the money back."
+              />
+            )
           }
           ListFooterComponent={
             bills.hasMore ? (
@@ -109,7 +157,7 @@ export default function BillsScreen() {
                 <ActivityIndicator style={styles.more} color={colors.primary} />
               ) : (
                 <PrimaryButton
-                  label="Show older claims"
+                  label="Show older bills"
                   variant="secondary"
                   onPress={() => void bills.loadMore()}
                   style={styles.more}
@@ -133,13 +181,16 @@ function Header({
   bills,
   hasMore,
   claimOf,
-  onAdvanceCount,
+  filters,
+  listTitle,
 }: {
   bills: InvoiceSummary[];
   hasMore: boolean;
   claimOf: (invoiceId: string) => Claim;
-  // Bills paid with advance cash, shown on their advance rather than here.
-  onAdvanceCount: number;
+  // The filter tabs, shown above the list.
+  filters: React.ReactNode;
+  // Title above the list when a filter is chosen.
+  listTitle?: string;
 }) {
   const styles = useStyles();
   const colors = useColors();
@@ -155,36 +206,19 @@ function Header({
     <View style={styles.header}>
       <PressableScale
         haptic="tap"
-        onPress={() => router.push('/upload-bill')}
+        onPress={() => router.push({ pathname: '/upload-bill', params: { own: '1' } })}
         accessibilityRole="button"
-        accessibilityLabel="New claim. Take a photo of the bill"
+        accessibilityLabel="New bill. Take a photo of the bill"
         style={styles.upload}>
         <View style={styles.uploadIcon}>
           <Ionicons name="camera" size={30} color={colors.primary} />
         </View>
         <View style={styles.uploadText}>
-          <Text style={styles.uploadTitle}>New claim</Text>
+          <Text style={styles.uploadTitle}>New bill</Text>
           <Text style={styles.uploadHint}>Take a photo of the bill</Text>
         </View>
         <Ionicons name="chevron-forward" size={24} color="#FFFFFF" />
       </PressableScale>
-
-      {onAdvanceCount > 0 ? (
-        <PressableScale
-          haptic="tap"
-          onPress={() => router.push('/tickets')}
-          accessibilityRole="button"
-          accessibilityLabel={`${onAdvanceCount} bills paid with advance cash are on your advances. Open Advances`}
-          style={styles.advanceLink}>
-          <Ionicons name="cash-outline" size={22} color={colors.primary} />
-          <Text style={styles.advanceLinkText}>
-            {onAdvanceCount === 1
-              ? '1 bill was paid with advance cash. See it in Advances.'
-              : `${onAdvanceCount} bills were paid with advance cash. See them in Advances.`}
-          </Text>
-          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-        </PressableScale>
-      ) : null}
 
       {bills.length > 0 ? (
         <>
@@ -211,7 +245,8 @@ function Header({
           {sentTotal > 0 ? (
             <Text style={styles.total}>Sent to get back: {formatMoney(sentTotal)}</Text>
           ) : null}
-          <Text style={styles.sectionTitle}>{hasMore ? 'Latest claims' : 'All claims'}</Text>
+          {filters}
+          <Text style={styles.sectionTitle}>{listTitle ?? (hasMore ? 'Latest bills' : 'All bills')}</Text>
         </>
       ) : null}
     </View>
@@ -281,7 +316,7 @@ function BillRow({ bill, claim }: { bill: InvoiceSummary; claim: Claim }) {
 const useStyles = createStyles((colors) => ({
   list: {
     paddingHorizontal: spacing.four,
-    paddingBottom: spacing.eight,
+    paddingBottom: TAB_BAR_CLEARANCE,
     flexGrow: 1,
   },
   separator: {
@@ -322,20 +357,6 @@ const useStyles = createStyles((colors) => ({
   uploadHint: {
     fontSize: 14,
     color: 'rgba(255,255,255,0.85)',
-  },
-  advanceLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.three,
-    padding: spacing.three,
-    borderRadius: radius.medium,
-    backgroundColor: colors.primarySoft,
-  },
-  advanceLinkText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textPrimary,
   },
   summary: {
     flexDirection: 'row',

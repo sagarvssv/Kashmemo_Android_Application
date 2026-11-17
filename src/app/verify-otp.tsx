@@ -23,7 +23,6 @@ export default function VerifyOtpScreen() {
   const [otp, setOtp] = useState('');
   const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS);
   const [error, setError] = useState<string | null>(null);
-  const [isVerifying, setIsVerifying] = useState(false);
 
   useEffect(() => {
     if (secondsLeft <= 0) return;
@@ -31,33 +30,26 @@ export default function VerifyOtpScreen() {
     return () => clearInterval(timer);
   }, [secondsLeft]);
 
-  const canSubmit = otp.length === 6 && Boolean(email) && !isVerifying;
+  const canSubmit = otp.length === 6 && Boolean(email);
 
-  // Check the code now so a wrong or expired one is caught here, not after the
-  // user has typed a new password. It isn't used up: the reset checks it again.
+  // The code is checked by reset-password together with the new password
+  // (the only reset route on every server), so here it just moves on; a wrong
+  // code is reported on the next screen, which can come back here.
   // `code` is passed straight from the input when the last digit is typed,
   // because the `otp` state hasn't updated yet at that moment.
-  // The ref (not the state) blocks a second call made in the same tick, e.g.
-  // the auto-verify on the last digit plus a tap on Continue, which would
-  // otherwise open the new-password screen twice.
+  // The ref blocks a second call in the same tick (auto-continue on the last
+  // digit plus a tap on Continue), which would open the next screen twice.
   const verifyingRef = useRef(false);
-  const handleVerify = async (code: string = otp) => {
+  const handleVerify = (code: string = otp) => {
     if (code.length !== 6 || !email || verifyingRef.current) return;
     verifyingRef.current = true;
-    setIsVerifying(true);
     setError(null);
-    try {
-      await authApi.verifyResetOtp(email, code);
-      haptics.success();
-      // navigate (not push) reuses the screen if it is somehow already open.
-      router.navigate({ pathname: '/reset-password', params: { email, otp: code } });
-    } catch (err) {
-      haptics.error();
-      setError(errorMessage(err));
-    } finally {
+    haptics.tap();
+    // navigate (not push) reuses the screen if it is somehow already open.
+    router.navigate({ pathname: '/reset-password', params: { email, otp: code } });
+    setTimeout(() => {
       verifyingRef.current = false;
-      setIsVerifying(false);
-    }
+    }, 500);
   };
 
   const handleOtpChange = (next: string) => {
@@ -94,7 +86,7 @@ export default function VerifyOtpScreen() {
           <Text style={styles.email}>{email}</Text>
         </Text>
 
-        <OtpInput value={otp} onChange={handleOtpChange} onComplete={(code) => void handleVerify(code)} hasError={Boolean(error)} />
+        <OtpInput value={otp} onChange={handleOtpChange} onComplete={(code) => handleVerify(code)} hasError={Boolean(error)} />
 
         {secondsLeft > 0 ? (
           <Text style={styles.resendHint}>Resend OTP in {timerLabel}</Text>
@@ -106,7 +98,7 @@ export default function VerifyOtpScreen() {
 
         <InlineError message={error} />
 
-        <PrimaryButton label="Continue" onPress={() => void handleVerify()} disabled={!canSubmit} loading={isVerifying} />
+        <PrimaryButton label="Continue" onPress={() => handleVerify()} disabled={!canSubmit} />
       </View>
     </SafeAreaView>
   );

@@ -109,7 +109,7 @@ export default function ManagerDepartmentsScreen() {
       refreshing={assigned.isRefreshing}
       onRefresh={assigned.refresh}>
       <Text style={styles.hint}>
-        A manager approves tickets for every department listed here, up to the approval limit set for each one.
+        A manager approves bills and cash requests for every department listed here, up to the approval limit set for each one.
       </Text>
 
       <InlineError message={error} />
@@ -197,7 +197,7 @@ export default function ManagerDepartmentsScreen() {
         title="Approval limit"
         message={
           limitFor
-            ? `Maximum ticket amount this manager can approve in ${limitFor.name}. The default is 1,000.`
+            ? `Maximum amount this manager can approve in ${limitFor.name}. The default is 1,000.`
             : undefined
         }
         fields={[{ key: 'limit', label: 'Limit', keyboardType: 'decimal-pad', placeholder: '1000' }]}

@@ -18,9 +18,10 @@ export const can = {
   viewWallet: (role: UserRole) => role !== 'CEO',
   // Advances (advance.service.ts in the backend): bills are reviewed by a
   // Manager (own departments), the Finance Manager or the CEO; only the
-  // Finance Manager settles; FM, CEO and HR see the outstanding list.
+  // Finance Manager or CEO settles (a Finance Manager's own advance: CEO only,
+  // see settlerRolesFor); FM, CEO and HR see the outstanding list.
   reviewAdvanceBills: (role: UserRole) => role === 'MANAGER' || role === 'FINANCE_MANAGER' || role === 'CEO',
-  settleAdvance: (role: UserRole) => role === 'FINANCE_MANAGER',
+  settleAdvance: (role: UserRole) => role === 'FINANCE_MANAGER' || role === 'CEO',
   viewOutstandingAdvances: (role: UserRole) => role === 'FINANCE_MANAGER' || role === 'CEO' || role === 'HR',
   viewDepartments: (role: UserRole) => ORG_ADMIN_ROLES.includes(role),
   addEmployee: (role: UserRole) => role !== 'EMPLOYEE',
@@ -35,6 +36,17 @@ export const can = {
   viewDailyReport: (role: UserRole) => role === 'CEO' || role === 'FINANCE_MANAGER',
   viewReports: (role: UserRole) => role === 'CEO' || role === 'FINANCE_MANAGER',
 };
+
+// Same table as getAllowedSettlerRoles() in the backend: who closes an advance.
+export function settlerRolesFor(raiserRole: UserRole): UserRole[] {
+  if (raiserRole === 'FINANCE_MANAGER') return ['CEO'];
+  return ['FINANCE_MANAGER', 'CEO'];
+}
+
+// Can this user settle an advance raised by someone with raiserRole? Never their own.
+export function canSettleAdvanceOf(myRole: UserRole, raiserRole: UserRole | undefined, isMine: boolean) {
+  return !isMine && raiserRole !== undefined && settlerRolesFor(raiserRole).includes(myRole);
+}
 
 // Same table as getAllowedApproverRoles() in the backend.
 export function approverRolesFor(raiserRole: UserRole): UserRole[] {

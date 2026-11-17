@@ -9,7 +9,7 @@ import { Screen } from '@/components/screen';
 import { Pager } from '@/components/pager';
 import { EmptyState, ErrorState, LoadingState } from '@/components/states';
 import { TicketRow } from '@/components/ticket-row';
-import { spacing } from '@/constants/theme';
+import { spacing, TAB_BAR_CLEARANCE } from '@/constants/theme';
 import { useCurrentUser, useRealtime } from '@/context/session';
 import { useColors } from '@/context/theme';
 import { useApi } from '@/hooks/use-api';
@@ -30,10 +30,10 @@ const CASCADE_ROWS = 10;
 function scopesFor(role: UserRole): { value: Scope; label: string }[] {
   // The CEO approves and oversees rather than raising tickets, so only sees
   // the organisation-wide list.
-  if (role === 'CEO') return [{ value: 'all', label: 'All tickets' }];
-  const scopes: { value: Scope; label: string }[] = [{ value: 'mine', label: 'My tickets' }];
+  if (role === 'CEO') return [{ value: 'all', label: 'All bills' }];
+  const scopes: { value: Scope; label: string }[] = [{ value: 'mine', label: 'My bills' }];
   if (can.viewDepartmentTickets(role)) scopes.push({ value: 'team', label: 'Department' });
-  if (can.viewOrgTickets(role)) scopes.push({ value: 'all', label: 'All tickets' });
+  if (can.viewOrgTickets(role)) scopes.push({ value: 'all', label: 'All bills' });
   return scopes;
 }
 
@@ -56,7 +56,7 @@ export default function TicketsScreen() {
   // Employees with a Claims tab see only their advances here (cash asked for
   // before spending); claims are on the Claims tab, so nothing shows twice.
   const advancesOnly = can.billsTab(user.role) && invoiceApiEnabled;
-  const noun = advancesOnly ? 'advances' : 'tickets';
+  const noun = advancesOnly ? 'cash requests' : 'bills';
   // With several scopes, open on the second (Department / All tickets) rather
   // than the user's own; with one, that's the only choice.
   const defaultScope = scopes.length > 1 ? scopes[1].value : scopes[0].value;
@@ -157,12 +157,12 @@ export default function TicketsScreen() {
 
   return (
     <Screen
-      title={advancesOnly ? 'My advances' : 'Tickets'}
-      subtitle={advancesOnly ? 'Cash you asked for before spending' : undefined}
+      title="Bills"
+      subtitle={advancesOnly ? 'Cash given to you. Add the bills, then settle' : undefined}
       scroll={false}
       right={
         user.departmentId ? (
-          <Pressable onPress={() => router.push('/raise-ticket')} hitSlop={8} accessibilityLabel="Request an advance">
+          <Pressable onPress={() => router.push('/raise-ticket')} hitSlop={8} accessibilityLabel="Request cash">
             <Ionicons name="add-circle" size={30} color={colors.primary} />
           </Pressable>
         ) : undefined
@@ -202,7 +202,7 @@ export default function TicketsScreen() {
               title={`No ${noun} here`}
               message={
                 emptyMessage(status, scope !== 'mine' ? departmentOptions.find((o) => o.value === selectedDepartment)?.label : undefined, noun) ??
-                (advancesOnly ? 'Need cash before you spend? Tap + to request an advance. Spent your own money? That is a claim, on the Claims tab.' : undefined)
+                (advancesOnly ? 'Need cash before you spend? Tap + to request cash. Spent your own money? Upload the bill on the Cash request tab.' : undefined)
               }
             />
           }
@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingHorizontal: spacing.four,
-    paddingBottom: spacing.eight,
+    paddingBottom: TAB_BAR_CLEARANCE,
   },
   separator: {
     height: spacing.three,

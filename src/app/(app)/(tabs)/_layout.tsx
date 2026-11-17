@@ -1,8 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
+import { router, Tabs } from 'expo-router';
 import React, { useEffect } from 'react';
-import type { ColorValue } from 'react-native';
+import { StyleSheet, type ColorValue } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { typography } from '@/constants/theme';
 
 import { useCurrentUser, useSession } from '@/context/session';
 import { useColors } from '@/context/theme';
@@ -42,37 +45,70 @@ export default function TabsLayout() {
   const user = useCurrentUser();
   const { unreadCount } = useSession();
   const employeeView = can.billsTab(user.role) && invoiceApiEnabled;
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
+      // The floating bar keeps clear of the system navigation bar itself.
+      safeAreaInsets={{ bottom: 0 }}
       screenListeners={{ tabPress: () => haptics.select() }}
       screenOptions={{
         headerShown: false,
         // Screens slide slightly and cross-fade when switching tabs.
         animation: 'shift',
+        sceneStyle: { backgroundColor: colors.background },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.borderLight },
+        tabBarLabelStyle: styles.label,
+        // Floating, rounded bar like the iOS app (in this app's own colours).
+        tabBarStyle: [
+          styles.bar,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.borderLight,
+            marginBottom: Math.max(insets.bottom, 12),
+          },
+        ],
+        tabBarItemStyle: styles.item,
+        tabBarBadgeStyle: [styles.badge, { backgroundColor: colors.danger }],
       }}>
       <Tabs.Screen name="home" options={{ title: 'Home', tabBarIcon: tabIcon('home-outline', 'home') }} />
       <Tabs.Screen
         name="bills"
         options={{
-          // Claims: own money spent, paid back. (Advances: cash given first.)
-          title: 'Claims',
+          // Employee: spent their own money, uploads the bill to get the cash back.
+          title: 'Cash request',
           tabBarIcon: tabIcon('document-text-outline', 'document-text'),
-          // Other roles reach My claims from Home or More (see can.billsTab).
+          // Other roles reach My bills from Home or More (see can.billsTab).
           href: employeeView ? undefined : null,
         }}
       />
-      {/* Employees only see their advances here; claims live in Claims. */}
+      {/* Employee: cash given before spending; add its bills and settle here.
+          Everyone else: every bill and cash request they can see. */}
       <Tabs.Screen
         name="tickets"
         options={
           employeeView
-            ? { title: 'Advances', tabBarIcon: tabIcon('cash-outline', 'cash') }
-            : { title: 'Tickets', tabBarIcon: tabIcon('receipt-outline', 'receipt') }
+            ? { title: 'Bills', tabBarIcon: tabIcon('cash-outline', 'cash') }
+            : { title: 'Bills', tabBarIcon: tabIcon('receipt-outline', 'receipt') }
         }
+      />
+      {/* Managers, Finance and HR scan a bill from this tab (employees from
+          Home). The CEO heads the organisation and doesn't claim money.
+          It opens the scan screen instead of showing a tab of its own. */}
+      <Tabs.Screen
+        name="scan"
+        options={{
+          title: 'Scan',
+          tabBarIcon: tabIcon('scan-outline', 'scan'),
+          href: !employeeView && invoiceApiEnabled && user.role !== 'CEO' ? undefined : null,
+        }}
+        listeners={{
+          tabPress: (event) => {
+            event.preventDefault();
+            router.push('/upload-bill');
+          },
+        }}
       />
       <Tabs.Screen
         name="people"
@@ -94,8 +130,35 @@ export default function TabsLayout() {
       />
       <Tabs.Screen
         name="profile"
-        options={{ title: 'More', tabBarIcon: tabIcon('ellipsis-horizontal-circle-outline', 'ellipsis-horizontal-circle') }}
+        options={{ title: 'Menu', tabBarIcon: tabIcon('menu-outline', 'menu') }}
       />
     </Tabs>
   );
 }
+const styles = StyleSheet.create({
+  bar: {
+    position: 'absolute',
+    marginHorizontal: 16,
+    height: 66,
+    paddingTop: 8,
+    paddingBottom: 8,
+    borderRadius: 26,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderWidth: StyleSheet.hairlineWidth,
+    elevation: 8,
+    shadowColor: '#000000',
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  item: {
+    paddingVertical: 2,
+  },
+  label: {
+    ...typography.micro,
+  },
+  badge: {
+    ...typography.micro,
+    fontWeight: '700',
+  },
+});

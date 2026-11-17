@@ -3,7 +3,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { AnimatedFill, PressableScale } from '@/components/motion';
-import { radius, spacing } from '@/constants/theme';
+import { iconBadge, radius, spacing, typography } from '@/constants/theme';
 import { createStyles, useColors } from '@/context/theme';
 
 type StatTileProps = {
@@ -11,29 +11,39 @@ type StatTileProps = {
   value: string;
   icon?: keyof typeof Ionicons.glyphMap;
   tone?: 'default' | 'highlight';
+  // Accent for the icon badge on default tiles; defaults to the primary color.
+  tint?: string;
   // Makes the tile a button (with a small arrow) that opens the details.
   onPress?: () => void;
   accessibilityHint?: string;
 };
 
-export function StatTile({ label, value, icon, tone = 'default', onPress, accessibilityHint }: StatTileProps) {
+// Same layout as the iOS app: icon badge and a small uppercase label on top,
+// the value below.
+export function StatTile({ label, value, icon, tone = 'default', tint, onPress, accessibilityHint }: StatTileProps) {
   const styles = useStyles();
   const colors = useColors();
   const highlight = tone === 'highlight';
+  const accent = tint ?? colors.primary;
   const content = (
     <>
-      {icon || onPress ? (
-        <View style={styles.topRow}>
-          {icon ? <Ionicons name={icon} size={18} color={highlight ? '#FFFFFF' : colors.primary} /> : <View />}
-          {onPress ? (
-            <Ionicons name="chevron-forward" size={16} color={highlight ? 'rgba(255,255,255,0.8)' : colors.textMuted} />
-          ) : null}
-        </View>
-      ) : null}
-      <Text style={[styles.value, highlight && styles.highlightText]} numberOfLines={1} adjustsFontSizeToFit>
+      <View style={styles.tileHeader}>
+        {icon ? (
+          <View style={[styles.iconBadge, { backgroundColor: highlight ? '#FFFFFF' : iconBadge(accent) }]}>
+            <Ionicons name={icon} size={13} color={highlight ? colors.primary : accent} />
+          </View>
+        ) : null}
+        <Text style={[styles.label, highlight && styles.highlightLabel]} numberOfLines={2}>
+          {label}
+        </Text>
+        {onPress ? (
+          <Ionicons name="chevron-forward" size={14} color={highlight ? 'rgba(255,255,255,0.8)' : colors.textMuted} />
+        ) : null}
+      </View>
+      {/* No adjustsFontSizeToFit: on Android it can draw nothing at all. */}
+      <Text style={[styles.value, value.length > 12 && styles.valueLong, highlight && styles.highlightText]} numberOfLines={1}>
         {value}
       </Text>
-      <Text style={[styles.label, highlight && styles.highlightLabel]}>{label}</Text>
     </>
   );
 
@@ -72,10 +82,19 @@ export function ProgressBar({ value, max }: { value: number; max: number }) {
 }
 
 const useStyles = createStyles((colors) => ({
-  topRow: {
+  tileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 6,
+    minHeight: 26,
+  },
+  iconBadge: {
+    width: 24,
+    height: 24,
+    flexShrink: 0,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   grid: {
     flexDirection: 'row',
@@ -85,10 +104,12 @@ const useStyles = createStyles((colors) => ({
   tile: {
     flexGrow: 1,
     flexBasis: '45%',
+    // Lets the tile shrink to its half of the row instead of growing with its text.
+    minWidth: 0,
     backgroundColor: colors.surface,
     borderRadius: radius.large,
-    padding: spacing.four,
-    gap: 6,
+    padding: spacing.three,
+    gap: spacing.two,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.borderLight,
   },
@@ -97,15 +118,22 @@ const useStyles = createStyles((colors) => ({
     borderColor: colors.primary,
   },
   value: {
-    fontSize: 20,
-    fontWeight: '700',
+    ...typography.headline,
+    fontSize: 17,
+    fontWeight: '800',
     color: colors.textPrimary,
+  },
+  valueLong: {
+    fontSize: 14,
   },
   highlightText: {
     color: '#FFFFFF',
   },
+  // Long labels wrap to a second line inside the tile instead of overflowing it.
   label: {
-    fontSize: 12,
+    ...typography.overline,
+    flex: 1,
+    flexShrink: 1,
     color: colors.textMuted,
   },
   highlightLabel: {

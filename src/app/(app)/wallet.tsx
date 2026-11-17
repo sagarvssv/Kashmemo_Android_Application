@@ -72,7 +72,7 @@ function WalletScreen() {
   return (
     <Screen
       title="My wallet"
-      subtitle="Cash from advances, and what is owed to you"
+      subtitle="Cash you requested, and what is owed to you"
       backFallback="/profile"
       refreshing={wallet.isRefreshing || mine.isRefreshing}
       onRefresh={refresh}>
@@ -100,7 +100,7 @@ function WalletScreen() {
 
           <Segmented
             options={[
-              { value: 'advances', label: `Advances (${data.openAdvances.length})` },
+              { value: 'advances', label: `Cash requests (${data.openAdvances.length})` },
               { value: 'collect', label: `To collect (${data.awaitingCollection.length})` },
               { value: 'history', label: 'History' },
             ]}
@@ -125,7 +125,7 @@ function WalletScreen() {
                 ))}
               </View>
             ) : (
-              <EmptyState icon="wallet-outline" title="No open advances" />
+              <EmptyState icon="wallet-outline" title="No open cash requests" />
             )
           ) : null}
 
@@ -175,10 +175,10 @@ function BalanceCard({ balance }: { balance: number }) {
   const title = balance > 0 ? 'Cash with you' : owed ? 'Finance owes you' : 'Your wallet is clear';
   const hint =
     balance > 0
-      ? 'Cash from your advances. Add a bill for what you buy, and give back what is left.'
+      ? 'Cash you requested. Add a bill for what you buy, and give back what is left.'
       : owed
-        ? 'You spent more than your advance. Finance pays you this when the advance is closed.'
-        : 'No advance cash with you right now.';
+        ? 'You spent more than you requested. Finance pays you this when the request is closed.'
+        : 'No requested cash with you right now.';
   return (
     <View style={styles.balance} accessible accessibilityLabel={`${title}: ${formatMoney(Math.abs(balance))}`}>
       <View style={styles.balanceIcon}>

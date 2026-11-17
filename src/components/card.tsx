@@ -1,9 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
 import { PressableScale } from '@/components/motion';
-import { radius, spacing } from '@/constants/theme';
+import { iconBadge, radius, spacing, typography } from '@/constants/theme';
 import { createStyles, useColors } from '@/context/theme';
 
 export function Card({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
@@ -14,22 +14,43 @@ export function Card({ children, style }: { children: React.ReactNode; style?: S
 type SectionProps = {
   title: string;
   action?: { label: string; onPress: () => void };
+  // Adds a triangle before the title; tapping the title opens or closes the section.
+  collapsible?: boolean;
+  // Whether a collapsible section starts open.
+  defaultOpen?: boolean;
   children: React.ReactNode;
 };
 
-export function Section({ title, action, children }: SectionProps) {
+export function Section({ title, action, collapsible, defaultOpen = true, children }: SectionProps) {
   const styles = useStyles();
+  const colors = useColors();
+  const [open, setOpen] = useState(defaultOpen);
+  const shown = !collapsible || open;
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{title}</Text>
+        {collapsible ? (
+          <PressableScale
+            haptic="select"
+            onPress={() => setOpen((current) => !current)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: open }}
+            accessibilityLabel={`${title}. ${open ? 'Close' : 'Open'} section`}
+            style={styles.sectionToggle}>
+            <Ionicons name={open ? 'caret-down' : 'caret-forward'} size={14} color={colors.textPrimary} />
+            <Text style={styles.sectionTitle}>{title}</Text>
+          </PressableScale>
+        ) : (
+          <Text style={styles.sectionTitle}>{title}</Text>
+        )}
         {action && (
           <PressableScale onPress={action.onPress} hitSlop={8}>
             <Text style={styles.sectionAction}>{action.label}</Text>
           </PressableScale>
         )}
       </View>
-      {children}
+      {shown ? children : null}
     </View>
   );
 }
@@ -39,19 +60,22 @@ type ListRowProps = {
   subtitle?: string;
   meta?: string;
   icon?: keyof typeof Ionicons.glyphMap;
+  // Accent for the icon badge; defaults to the primary color.
+  tint?: string;
   right?: React.ReactNode;
   onPress?: () => void;
   destructive?: boolean;
 };
 
-export function ListRow({ title, subtitle, meta, icon, right, onPress, destructive }: ListRowProps) {
+export function ListRow({ title, subtitle, meta, icon, tint, right, onPress, destructive }: ListRowProps) {
   const styles = useStyles();
   const colors = useColors();
+  const accent = destructive ? colors.danger : (tint ?? colors.primary);
   const content = (
     <>
       {icon && (
-        <View style={styles.rowIcon}>
-          <Ionicons name={icon} size={18} color={destructive ? colors.danger : colors.primary} />
+        <View style={[styles.rowIcon, { backgroundColor: iconBadge(accent) }]}>
+          <Ionicons name={icon} size={16} color={accent} />
         </View>
       )}
       <View style={styles.rowText}>
@@ -66,7 +90,7 @@ export function ListRow({ title, subtitle, meta, icon, right, onPress, destructi
       </View>
       {meta ? <Text style={styles.rowMeta}>{meta}</Text> : null}
       {right}
-      {onPress && !right ? <Ionicons name="chevron-forward" size={18} color={colors.textMuted} /> : null}
+      {onPress && !right ? <Ionicons name="chevron-forward" size={16} color={colors.textMuted} /> : null}
     </>
   );
 
@@ -83,11 +107,30 @@ export function Divider() {
   return <View style={styles.divider} />;
 }
 
-export function KeyValue({ label, value }: { label: string; value: React.ReactNode }) {
+export function KeyValue({
+  label,
+  value,
+  icon,
+  tint,
+}: {
+  label: string;
+  value: React.ReactNode;
+  icon?: keyof typeof Ionicons.glyphMap;
+  tint?: string;
+}) {
   const styles = useStyles();
+  const colors = useColors();
+  const accent = tint ?? colors.primary;
   return (
     <View style={styles.keyValue}>
-      <Text style={styles.key}>{label}</Text>
+      <View style={styles.keyLabel}>
+        {icon && (
+          <View style={[styles.keyIcon, { backgroundColor: iconBadge(accent) }]}>
+            <Ionicons name={icon} size={13} color={accent} />
+          </View>
+        )}
+        <Text style={styles.key}>{label}</Text>
+      </View>
       {typeof value === 'string' || typeof value === 'number' ? (
         <Text style={styles.value}>{value}</Text>
       ) : (
@@ -114,30 +157,33 @@ const useStyles = createStyles((colors) => ({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  sectionToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 1,
+  },
   sectionTitle: {
-    fontSize: 15,
-    fontWeight: '700',
+    ...typography.headline,
     color: colors.textPrimary,
   },
   sectionAction: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...typography.footnoteStrong,
     color: colors.primary,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.three,
-    paddingVertical: spacing.three,
+    paddingVertical: 10,
   },
   rowPressed: {
     opacity: 0.6,
   },
   rowIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: colors.background,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -146,17 +192,15 @@ const useStyles = createStyles((colors) => ({
     gap: 2,
   },
   rowTitle: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...typography.bodyStrong,
     color: colors.textPrimary,
   },
   rowSubtitle: {
-    fontSize: 13,
+    ...typography.footnote,
     color: colors.textMuted,
   },
   rowMeta: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...typography.calloutStrong,
     color: colors.textPrimary,
   },
   divider: {
@@ -169,14 +213,26 @@ const useStyles = createStyles((colors) => ({
     alignItems: 'center',
     gap: spacing.three,
   },
+  keyLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.two,
+    flexShrink: 0,
+  },
+  keyIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   key: {
-    fontSize: 14,
+    ...typography.callout,
     color: colors.textMuted,
   },
   value: {
     flexShrink: 1,
-    fontSize: 14,
-    fontWeight: '600',
+    ...typography.calloutStrong,
     color: colors.textPrimary,
     textAlign: 'right',
   },
