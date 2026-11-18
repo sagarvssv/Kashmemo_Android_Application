@@ -15,6 +15,7 @@ import { useCurrentUser, useRealtime } from '@/context/session';
 import { createStyles, useColors } from '@/context/theme';
 import { useApi } from '@/hooks/use-api';
 import { departmentApi, employeeApi, managerApi } from '@/lib/endpoints';
+import { ALL_DEPARTMENTS_ICON, departmentIcon } from '@/lib/filter-icons';
 import { initials, ROLE_LABELS } from '@/lib/format';
 import { can } from '@/lib/permissions';
 import type { Employee } from '@/lib/types';
@@ -108,6 +109,7 @@ function DepartmentPeople({ managerId }: { managerId: string }) {
             options={list.map((department) => ({
               value: department.id,
               label: department.isPrimary ? `${department.name} (primary)` : department.name,
+              icon: departmentIcon(department.name),
             }))}
             value={selectedId ?? ''}
             onChange={setDepartmentId}
@@ -170,8 +172,8 @@ function OrganizationPeople() {
   // departments show up as new chips.
   const departments = useApi(() => departmentApi.list().then((r) => r.data), []);
   const departmentOptions = [
-    { value: ALL_DEPARTMENTS, label: 'All departments' },
-    ...(departments.data ?? []).map((item) => ({ value: item.id, label: item.name })),
+    { value: ALL_DEPARTMENTS, label: 'All departments', icon: ALL_DEPARTMENTS_ICON },
+    ...(departments.data ?? []).map((item) => ({ value: item.id, label: item.name, icon: departmentIcon(item.name) })),
   ];
   // Falls back to all departments if the chosen one has since been removed.
   const selectedDepartment = departmentOptions.some((option) => option.value === department)

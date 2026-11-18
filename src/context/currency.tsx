@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { DEFAULT_CURRENCY, findCurrency, type Currency } from '@/lib/currencies';
-import { formatMoney } from '@/lib/format';
+import { formatMoney, formatMoneyInText } from '@/lib/format';
 import { readCurrency, writeCurrency } from '@/lib/storage';
 import type { Money } from '@/lib/types';
 
@@ -52,4 +52,10 @@ export function useCurrency() {
 export function useFormatMoney() {
   const { currency } = useCurrency();
   return useCallback((value: Money | null | undefined) => formatMoney(value, currency.code), [currency.code]);
+}
+
+// Same, for amounts inside server-written text (notifications, activity).
+export function useMoneyText() {
+  const { currency } = useCurrency();
+  return useCallback((text: string) => formatMoneyInText(text, currency.code), [currency.code]);
 }

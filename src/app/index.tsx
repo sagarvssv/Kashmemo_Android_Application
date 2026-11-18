@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 
-import { BRAND_GREEN_DARK, BrandLogo } from '@/components/brand-logo';
+import { BRAND_GREEN_DEEP, BrandLogo } from '@/components/brand-logo';
 import { useSession } from '@/context/session';
 import { createStyles } from '@/context/theme';
 
@@ -53,7 +53,8 @@ const useStyles = createStyles((colors) => ({
   },
   container: {
     flex: 1,
-    backgroundColor: BRAND_GREEN_DARK,
+    // Same as the native splash background (app.json), so there is no flash.
+    backgroundColor: BRAND_GREEN_DEEP,
     alignItems: 'center',
     justifyContent: 'center',
   },

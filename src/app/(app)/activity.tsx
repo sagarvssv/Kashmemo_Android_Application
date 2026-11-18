@@ -6,6 +6,7 @@ import { Appear } from '@/components/motion';
 import { Screen } from '@/components/screen';
 import { EmptyState, ErrorState, LoadingState } from '@/components/states';
 import { spacing } from '@/constants/theme';
+import { useMoneyText } from '@/context/currency';
 import { useCurrentUser, useRealtime } from '@/context/session';
 import { useCursorList } from '@/hooks/use-api';
 import { dashboardApi } from '@/lib/endpoints';
@@ -13,6 +14,7 @@ import { formatDateTime, humanize } from '@/lib/format';
 
 export default function ActivityScreen() {
   const user = useCurrentUser();
+  const moneyText = useMoneyText();
   const list = useCursorList((cursor) => dashboardApi.recentActivity({ cursor, limit: 25 }), []);
 
   useRealtime(['activity'], () => {
@@ -46,7 +48,7 @@ export default function ActivityScreen() {
                 <ListRow
                   icon="pulse-outline"
                   title={humanize(item.type)}
-                  subtitle={`${item.message}\n${item.actor?.name ?? 'Someone'} · ${formatDateTime(item.createdAt)}`}
+                  subtitle={`${moneyText(item.message)}\n${item.actor?.name ?? 'Someone'} · ${formatDateTime(item.createdAt)}`}
                 />
               </Card>
             );

@@ -22,10 +22,11 @@ import {
   DailyReportShortcut,
   DepartmentBudgetRow,
   DepartmentTicketsPreview,
-  greetingSubtitle,
   greetingLine,
   greetingTitle,
-  ProfileButton,
+  HomeAvatar,
+  HomeMeta,
+  NotificationBell,
   RaiseTicketButton,
   TicketPreviewList,
 } from './shared';
@@ -103,8 +104,9 @@ export function FinanceDashboard() {
     <Screen
       overline={greetingLine()}
       title={greetingTitle(user)}
-      subtitle={greetingSubtitle(user)}
-      right={<ProfileButton />}
+      leading={<HomeAvatar />}
+      meta={<HomeMeta />}
+      right={<NotificationBell />}
       refreshing={statuses.isRefreshing}
       onRefresh={refresh}>
       <MonthSwitcher value={month} onChange={setMonth} />

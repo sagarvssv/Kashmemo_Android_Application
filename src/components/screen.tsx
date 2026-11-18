@@ -193,6 +193,7 @@ const useStyles = createStyles((colors) => ({
   overline: {
     ...typography.footnote,
     color: colors.textMuted,
+    marginBottom: 1,
   },
   title: {
     ...typography.largeTitle,

@@ -17,10 +17,11 @@ import { toAmount } from '@/lib/format';
 
 import {
   DepartmentBudgetRow,
-  greetingSubtitle,
   greetingLine,
   greetingTitle,
-  ProfileButton,
+  HomeAvatar,
+  HomeMeta,
+  NotificationBell,
   RaiseTicketButton,
   TicketPreviewList,
 } from './shared';
@@ -72,8 +73,9 @@ export function ManagerDashboard() {
     <Screen
       overline={greetingLine()}
       title={greetingTitle(user)}
-      subtitle={greetingSubtitle(user)}
-      right={<ProfileButton />}
+      leading={<HomeAvatar />}
+      meta={<HomeMeta />}
+      right={<NotificationBell />}
       refreshing={departments.isRefreshing || pending.isRefreshing}
       onRefresh={refresh}>
       <MonthSwitcher value={month} onChange={setMonth} />

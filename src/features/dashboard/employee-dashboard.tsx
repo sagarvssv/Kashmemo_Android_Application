@@ -12,6 +12,7 @@ import { useCurrentUser, useRealtime } from '@/context/session';
 import { createStyles, useColors, useTheme } from '@/context/theme';
 import { useApi } from '@/hooks/use-api';
 import { ticketApi } from '@/lib/endpoints';
+import { ALL_ICON, STATUS_ICONS } from '@/lib/filter-icons';
 import { STATUS_LABELS, toAmount } from '@/lib/format';
 import { invoiceApiEnabled } from '@/lib/invoices';
 import type { Ticket, TicketStatus } from '@/lib/types';
@@ -97,9 +98,13 @@ export function EmployeeDashboard() {
   );
   const openRequests = walletData?.openAdvances.length ?? 0;
 
-  const filterOptions: { value: RecentFilter; label: string }[] = [
-    { value: 'ALL', label: 'All' },
-    ...RECENT_FILTERS.map((status) => ({ value: status, label: STATUS_LABELS[status] })),
+  const filterOptions = [
+    { value: 'ALL' as RecentFilter, label: 'All', icon: ALL_ICON },
+    ...RECENT_FILTERS.map((status) => ({
+      value: status as RecentFilter,
+      label: STATUS_LABELS[status],
+      icon: STATUS_ICONS[status],
+    })),
   ];
 
   return (
@@ -107,7 +112,7 @@ export function EmployeeDashboard() {
       overline={greetingLine()}
       title={greetingTitle(user)}
       leading={<HomeAvatar />}
-      meta={<HomeMeta label="Employee Dashboard" icon="grid-outline" />}
+      meta={<HomeMeta />}
       // Employees have no Alerts tab, so notifications open from here.
       right={<NotificationBell />}
       refreshing={raised.isRefreshing || pending.isRefreshing || wallet.isRefreshing || recent.isRefreshing}

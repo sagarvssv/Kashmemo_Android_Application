@@ -313,13 +313,13 @@ export const dashboardApi = {
     request<CursorPage<Activity>>('/api/org/dashboard/recent-activities', { query }),
 
   disbursedTickets: (query: MonthQuery = {}) =>
-    request<ApiEnvelope<Ticket[]>>('/api/dashboard/disbursed-tickets', { query }),
+    request<ApiEnvelope<Ticket[]>>('/api/org/dashboard/disbursed-tickets', { query }),
 
   disbursedSummary: (query: MonthQuery = {}) =>
-    request<ApiEnvelope<DisbursedSummary>>('/api/dashboard/disbursed-tickets-summary', { query }),
+    request<ApiEnvelope<DisbursedSummary>>('/api/org/dashboard/disbursed-tickets-summary', { query }),
 
   dailyReport: (startdate: string, enddate: string) =>
-    request<ApiEnvelope<DailyReport>>('/api/dashboard/daily-ticket-report', { query: { startdate, enddate } }),
+    request<ApiEnvelope<DailyReport>>('/api/org/dashboard/daily-ticket-report', { query: { startdate, enddate } }),
 };
 
 // ─── Notifications ───

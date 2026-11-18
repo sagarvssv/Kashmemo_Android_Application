@@ -27,6 +27,21 @@ export function formatMoney(value: Money | null | undefined, currency: string = 
   return currencyFormatter(currency).format(toAmount(value));
 }
 
+// Amounts the server writes into notification and activity text ("₹5,000",
+// "Rs. 5000", "AED 1,250.50", "5000 INR"). Like every other amount in the app
+// they are shown in the currency picked in Profile, so all screens match (and
+// match the iOS app). Bare numbers without a currency mark are left alone.
+const MONEY_IN_TEXT =
+  /(?:₹|Rs\.?|INR|AED|د\.إ\.?)\s?(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s?(?:INR|AED)\b/g;
+
+export function formatMoneyInText(text: string, currency: string = DEFAULT_CURRENCY): string {
+  if (!text) return text;
+  return text.replace(MONEY_IN_TEXT, (match, before: string | undefined, after: string | undefined) => {
+    const amount = Number((before ?? after ?? '').replace(/,/g, ''));
+    return Number.isFinite(amount) ? formatMoney(amount, currency) : match;
+  });
+}
+
 export function formatDate(value: string | null | undefined): string {
   if (!value) return '—';
   const date = new Date(value);

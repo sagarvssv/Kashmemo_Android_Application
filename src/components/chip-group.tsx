@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
@@ -5,10 +6,11 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-na
 import { PressableScale } from '@/components/motion';
 import { motion } from '@/constants/motion';
 import { spacing } from '@/constants/theme';
-import { createStyles } from '@/context/theme';
+import { createStyles, useColors } from '@/context/theme';
 import { haptics } from '@/lib/haptics';
 
-type Option<T extends string> = { value: T; label: string };
+// `icon` shows before the label, e.g. a department or status icon.
+type Option<T extends string> = { value: T; label: string; icon?: keyof typeof Ionicons.glyphMap };
 
 type ChipGroupProps<T extends string> = {
   options: Option<T>[];
@@ -20,6 +22,7 @@ type ChipGroupProps<T extends string> = {
 
 export function ChipGroup<T extends string>({ options, value, onChange, wrap }: ChipGroupProps<T>) {
   const styles = useStyles();
+  const colors = useColors();
   const chips = options.map((option) => {
     const selected = option.value === value;
     return (
@@ -29,7 +32,10 @@ export function ChipGroup<T extends string>({ options, value, onChange, wrap }: 
         haptic={selected ? undefined : 'select'}
         accessibilityRole="button"
         accessibilityState={{ selected }}
-        style={[styles.chip, selected && styles.chipSelected]}>
+        style={[styles.chip, option.icon && styles.chipWithIcon, selected && styles.chipSelected]}>
+        {option.icon ? (
+          <Ionicons name={option.icon} size={15} color={selected ? '#FFFFFF' : colors.primary} />
+        ) : null}
         <Text style={[styles.label, selected && styles.labelSelected]}>{option.label}</Text>
       </PressableScale>
     );
@@ -106,6 +112,12 @@ const useStyles = createStyles((colors) => ({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.borderLight,
+  },
+  chipWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingLeft: 11,
   },
   chipSelected: {
     backgroundColor: colors.primary,

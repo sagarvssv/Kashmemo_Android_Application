@@ -11,6 +11,7 @@ import { ErrorState, InlineError, LoadingState } from '@/components/states';
 import { TicketTracker } from '@/components/ticket-tracker';
 import { categoryLabel } from '@/constants/expense-categories';
 import { spacing } from '@/constants/theme';
+import { useCurrency, useFormatMoney } from '@/context/currency';
 import { useCurrentUser } from '@/context/session';
 import { createStyles, useColors, useTheme } from '@/context/theme';
 import { useApi } from '@/hooks/use-api';
@@ -41,6 +42,8 @@ export default function BillDetailScreen() {
   const { statusColors } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const user = useCurrentUser();
+  const formatMoney = useFormatMoney();
+  const { currency } = useCurrency();
   // Employees open own-money bills from the Cash request tab, so the header
   // says that; other roles open them from My bills.
   const screenTitle = can.billsTab(user.role) && invoiceApiEnabled ? 'Cash request' : 'Bill';
@@ -82,6 +85,7 @@ export default function BillDetailScreen() {
   const advanceBill = billTickets.onAdvance.get(data.invoiceId);
   const extracted = data.extracted ?? {};
   const tone = statusColors[BILL_STATUS[data.status].tone];
+  const claimedAmount = ticket ? ticket.amount : advanceBill ? advanceBill.amount : null;
   const money = (value: number | null | undefined) =>
     value != null ? `${extracted.currency ?? ''} ${value.toLocaleString(LOCALE)}`.trim() : '—';
 
@@ -157,7 +161,19 @@ export default function BillDetailScreen() {
         ) : undefined
       }>
       <Card>
-        <Text style={styles.amount}>{money(extracted.totalAmount)}</Text>
+        {/* Once sent, the claimed amount (converted by the backend into the
+            app's currency) in the currency chosen in Profile, with the bill's
+            own amount below when it was in another currency. */}
+        {claimedAmount != null ? (
+          <>
+            <Text style={styles.amount}>{formatMoney(claimedAmount)}</Text>
+            {extracted.currency && extracted.currency !== currency.code && extracted.totalAmount != null ? (
+              <Text style={styles.note}>On the bill: {money(extracted.totalAmount)}</Text>
+            ) : null}
+          </>
+        ) : (
+          <Text style={styles.amount}>{money(extracted.totalAmount)}</Text>
+        )}
         <BillStatusBadge status={data.status} />
         <View style={[styles.statusBox, { backgroundColor: tone.background }]}>
           {isReading ? <ActivityIndicator color={tone.text} /> : null}

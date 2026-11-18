@@ -14,6 +14,7 @@ import { useCurrentUser, useRealtime } from '@/context/session';
 import { useColors } from '@/context/theme';
 import { useApi } from '@/hooks/use-api';
 import { departmentApi, managerApi, ticketApi } from '@/lib/endpoints';
+import { ALL_DEPARTMENTS_ICON, ALL_ICON, departmentIcon, STATUS_ICONS } from '@/lib/filter-icons';
 import { STATUS_LABELS } from '@/lib/format';
 import { invoiceApiEnabled } from '@/lib/invoices';
 import { can } from '@/lib/permissions';
@@ -43,9 +44,13 @@ function emptyMessage(status: StatusFilter, departmentLabel: string | undefined,
   return status === 'ALL' ? undefined : `No ${what}.`;
 }
 
-const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
-  { value: 'ALL', label: 'All' },
-  ...TICKET_STATUSES.map((status) => ({ value: status, label: STATUS_LABELS[status] })),
+const STATUS_OPTIONS = [
+  { value: 'ALL' as StatusFilter, label: 'All', icon: ALL_ICON },
+  ...TICKET_STATUSES.map((status) => ({
+    value: status as StatusFilter,
+    label: STATUS_LABELS[status],
+    icon: STATUS_ICONS[status],
+  })),
 ];
 
 export default function TicketsScreen() {
@@ -56,7 +61,8 @@ export default function TicketsScreen() {
   // Employees with a Claims tab see only their advances here (cash asked for
   // before spending); claims are on the Claims tab, so nothing shows twice.
   const advancesOnly = can.billsTab(user.role) && invoiceApiEnabled;
-  const noun = advancesOnly ? 'cash requests' : 'bills';
+  // This tab is always named Bills, so its empty and filtered messages say bills too.
+  const noun = 'bills';
   // With several scopes, open on the second (Department / All tickets) rather
   // than the user's own; with one, that's the only choice.
   const defaultScope = scopes.length > 1 ? scopes[1].value : scopes[0].value;
@@ -79,8 +85,12 @@ export default function TicketsScreen() {
     [],
   );
   const departmentOptions = [
-    { value: ALL_DEPARTMENTS, label: scope === 'team' ? 'All my departments' : 'All departments' },
-    ...(departments.data ?? []).map((item) => ({ value: item.id, label: item.name })),
+    {
+      value: ALL_DEPARTMENTS,
+      label: scope === 'team' ? 'All my departments' : 'All departments',
+      icon: ALL_DEPARTMENTS_ICON,
+    },
+    ...(departments.data ?? []).map((item) => ({ value: item.id, label: item.name, icon: departmentIcon(item.name) })),
   ];
   // Falls back to all departments if the chosen one has since been removed.
   const selectedDepartment = departmentOptions.some((option) => option.value === department)
@@ -198,7 +208,7 @@ export default function TicketsScreen() {
           refreshControl={<RefreshControl refreshing={list.isRefreshing} onRefresh={refresh} />}
           ListEmptyComponent={
             <EmptyState
-              icon={advancesOnly ? 'cash-outline' : 'receipt-outline'}
+              icon="receipt-outline"
               title={`No ${noun} here`}
               message={
                 emptyMessage(status, scope !== 'mine' ? departmentOptions.find((o) => o.value === selectedDepartment)?.label : undefined, noun) ??

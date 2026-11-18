@@ -18,6 +18,7 @@ import { BILL_STATUS, BillStatusBadge } from '@/features/bills/bill-status';
 import { useBillTickets } from '@/features/bills/bill-tickets';
 import { useCursorList } from '@/hooks/use-api';
 import { LOCALE } from '@/lib/config';
+import { ALL_ICON, NOT_SENT_ICON, STATUS_ICONS } from '@/lib/filter-icons';
 import { formatDate, STATUS_LABELS, toAmount } from '@/lib/format';
 import { invoiceApi, invoiceApiEnabled, type InvoiceSummary } from '@/lib/invoices';
 import { can } from '@/lib/permissions';
@@ -98,7 +99,11 @@ export default function BillsScreen() {
   // Only tabs with bills in them (plus All and the one chosen), with counts.
   const filterOptions = FILTERS.filter(
     (option) => option.value === 'ALL' || option.value === filter || (counts.get(option.value) ?? 0) > 0,
-  ).map((option) => ({ value: option.value, label: `${option.label} (${counts.get(option.value) ?? 0})` }));
+  ).map((option) => ({
+    value: option.value,
+    label: `${option.label} (${counts.get(option.value) ?? 0})`,
+    icon: option.value === 'ALL' ? ALL_ICON : option.value === 'NOT_SENT' ? NOT_SENT_ICON : STATUS_ICONS[option.value],
+  }));
   const shownBills =
     filter === 'ALL' ? ownBills : ownBills.filter((bill) => filterOf(bill, claimOf(bill.invoiceId)) === filter);
   const filterLabel = FILTERS.find((option) => option.value === filter)?.label ?? 'All';
@@ -266,6 +271,7 @@ function BillRow({ bill, claim }: { bill: InvoiceSummary; claim: Claim }) {
   const styles = useStyles();
   const colors = useColors();
   const { statusColors } = useTheme();
+  const formatMoney = useFormatMoney();
   const { ticket } = claim;
   const when = bill.invoiceDate ?? bill.uploadedAt;
   const next = nextStep(bill, claim);
@@ -306,7 +312,12 @@ function BillRow({ bill, claim }: { bill: InvoiceSummary; claim: Claim }) {
         )}
         {next ? <Text style={styles.next}>{next}</Text> : null}
       </View>
-      {bill.totalAmount != null ? (
+      {/* Once sent, the claimed amount (converted by the backend into the app's
+          currency) in the currency chosen in Profile; before that, the bill's
+          own currency, since nothing has been converted yet. */}
+      {ticket ? (
+        <Text style={styles.amount}>{formatMoney(ticket.amount)}</Text>
+      ) : bill.totalAmount != null ? (
         <Text style={styles.amount}>{`${bill.currency ?? ''} ${bill.totalAmount.toLocaleString(LOCALE)}`.trim()}</Text>
       ) : null}
     </PressableScale>

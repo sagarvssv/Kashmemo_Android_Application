@@ -4,17 +4,17 @@ import { Platform } from 'react-native';
 
 const BACKEND_PORT = 3000;
 
-// In development an Android emulator always reaches the developer's machine at
-// 10.0.2.2, so it talks to the local backend directly and keeps working when the
-// tunnel used by physical phones is down. Otherwise EXPO_PUBLIC_API_URL wins
-// when set, and failing that we reuse the host the Metro bundler is served from.
+// EXPO_PUBLIC_API_URL wins whenever it is set (.env.local in development,
+// eas.json in builds), on phones and emulators alike. Without it, an Android
+// emulator in development reaches the developer's machine at 10.0.2.2 (the
+// local backend), and anything else reuses the host Metro is served from.
 function resolveApiBaseUrl(): string {
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL;
+  if (fromEnv) return fromEnv.replace(/\/+$/, '');
+
   if (__DEV__ && Platform.OS === 'android' && !Device.isDevice) {
     return `http://10.0.2.2:${BACKEND_PORT}`;
   }
-
-  const fromEnv = process.env.EXPO_PUBLIC_API_URL;
-  if (fromEnv) return fromEnv.replace(/\/+$/, '');
 
   const hostUri = Constants.expoConfig?.hostUri;
   const host = hostUri?.split(':')[0];

@@ -7,9 +7,16 @@ import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
-import { BRAND_GREEN, BRAND_GREEN_DARK, BRAND_GREEN_DEEP, BRAND_LIME, BrandLogo } from '@/components/brand-logo';
+import { BrandLogo } from '@/components/brand-logo';
 import { spacing, typography } from '@/constants/theme';
 import { createStyles } from '@/context/theme';
+
+// The Welcome screen keeps its original deep green background and mint
+// accents; only the logo follows the new brand green.
+const BRAND_GREEN = '#3f8f5f';
+const BRAND_GREEN_DARK = '#24603d';
+const BRAND_GREEN_DEEP = '#143d26';
+const BRAND_LIME = '#cdeedb';
 
 const FEATURES: { icon: keyof typeof Ionicons.glyphMap; title: string; text: string }[] = [
   { icon: 'scan-outline', title: 'Scan your bills', text: 'Snap a photo and the details fill in for you.' },

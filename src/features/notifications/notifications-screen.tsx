@@ -10,6 +10,7 @@ import { Screen } from '@/components/screen';
 import { EmptyState, ErrorState, LoadingState } from '@/components/states';
 import { motion, staggerDelay } from '@/constants/motion';
 import { radius, spacing, TAB_BAR_CLEARANCE } from '@/constants/theme';
+import { useMoneyText } from '@/context/currency';
 import { useRealtime, useSession } from '@/context/session';
 import { createStyles, useColors } from '@/context/theme';
 import { useCursorList } from '@/hooks/use-api';
@@ -45,6 +46,7 @@ export function NotificationsScreen({ showBack = false }: { showBack?: boolean }
   const styles = useStyles();
   const colors = useColors();
   const { unreadCount, refreshUnreadCount } = useSession();
+  const moneyText = useMoneyText();
   const [filter, setFilter] = useState<Filter>('all');
 
   const list = useCursorList(
@@ -117,6 +119,8 @@ export function NotificationsScreen({ showBack = false }: { showBack?: boolean }
         <ErrorState message={list.error} onRetry={list.reload} />
       ) : (
         <FlatList
+          // Rows show amounts in the chosen currency; redraw them when it changes.
+          extraData={moneyText}
           data={list.items}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
@@ -135,7 +139,7 @@ export function NotificationsScreen({ showBack = false }: { showBack?: boolean }
                 <Ionicons name={ICONS[item.type] ?? 'notifications-outline'} size={20} color={colors.primary} />
               </View>
               <View style={styles.text}>
-                <Text style={[styles.message, !item.isRead && styles.messageUnread]}>{item.message}</Text>
+                <Text style={[styles.message, !item.isRead && styles.messageUnread]}>{moneyText(item.message)}</Text>
                 {item.metadata?.rejectionReason ? (
                   <Text style={styles.detail}>Reason: {item.metadata.rejectionReason}</Text>
                 ) : null}

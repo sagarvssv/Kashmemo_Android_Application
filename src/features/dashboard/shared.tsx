@@ -12,14 +12,15 @@ import { EmptyState } from '@/components/states';
 import { ProgressBar } from '@/components/stat-tile';
 import { TicketRow } from '@/components/ticket-row';
 import { iconBadge, spacing, typography } from '@/constants/theme';
-import { useFormatMoney } from '@/context/currency';
+import { useFormatMoney, useMoneyText } from '@/context/currency';
 import { useCurrentUser, useRealtime, useSession } from '@/context/session';
 import { createStyles, useColors } from '@/context/theme';
 import { useApi } from '@/hooks/use-api';
 import { dashboardApi, departmentApi, ticketApi } from '@/lib/endpoints';
 import { can } from '@/lib/permissions';
+import { ALL_DEPARTMENTS_ICON, departmentIcon } from '@/lib/filter-icons';
 import { formatRelative, initials, ROLE_LABELS } from '@/lib/format';
-import type { BudgetStatus, SessionUser, Ticket } from '@/lib/types';
+import type { BudgetStatus, SessionUser, Ticket, UserRole } from '@/lib/types';
 
 // Home header: the greeting on a small line, the first name as the title, so
 // a long name isn't cut off next to the avatar and buttons.
@@ -32,9 +33,14 @@ export function greetingTitle(user: SessionUser) {
   return user.name.split(' ')[0];
 }
 
-export function greetingSubtitle(user: SessionUser) {
-  return [ROLE_LABELS[user.role], user.companyName].filter(Boolean).join(' · ');
-}
+// The dashboard each role lands on, named in the Home header pill.
+const DASHBOARDS: Record<UserRole, { label: string; icon: keyof typeof Ionicons.glyphMap }> = {
+  CEO: { label: 'CEO Dashboard', icon: 'ribbon-outline' },
+  HR: { label: 'HR Dashboard', icon: 'people-outline' },
+  FINANCE_MANAGER: { label: 'Finance Dashboard', icon: 'wallet-outline' },
+  MANAGER: { label: 'Manager Dashboard', icon: 'briefcase-outline' },
+  EMPLOYEE: { label: 'Employee Dashboard', icon: 'person-outline' },
+};
 
 // Ask for cash before spending (needs a department on the raiser, as the
 // backend requires). Scanning a bill is on the Scan tab.
@@ -67,26 +73,6 @@ export function NotificationBell() {
   );
 }
 
-// Initials at the top right of Home (iOS ProfileButton); opens Menu.
-export function ProfileButton() {
-  const styles = useStyles();
-  const colors = useColors();
-  const user = useCurrentUser();
-  return (
-    <PressableScale
-      haptic="tap"
-      onPress={() => router.push('/profile')}
-      hitSlop={8}
-      accessibilityRole="button"
-      accessibilityLabel="Your profile"
-      style={[styles.profileButton, { backgroundColor: colors.primary }]}>
-      <Text style={styles.profileInitials}>{initials(user.name)}</Text>
-      {/* Nudge towards the profile while a temporary password is still in use. */}
-      {user.mustResetPassword ? <View style={[styles.profileDot, { borderColor: colors.background }]} /> : null}
-    </PressableScale>
-  );
-}
-
 // Home header, same layout as the iOS app: the user's initials on the left
 // (opens Menu), and under the greeting a role pill with the company name.
 export function HomeAvatar() {
@@ -101,27 +87,35 @@ export function HomeAvatar() {
       accessibilityLabel="Your profile"
       style={[styles.avatar, { backgroundColor: colors.primary }]}>
       <Text style={styles.avatarText}>{initials(user.name)}</Text>
+      {/* Small "online" dot, as in the iOS app. */}
+      <View style={styles.avatarStatus} />
       {/* Nudge towards the profile while a temporary password is still in use. */}
       {user.mustResetPassword ? <View style={[styles.avatarDot, { borderColor: colors.background }]} /> : null}
     </PressableScale>
   );
 }
 
-// `label` replaces the role/designation in the pill, e.g. the dashboard name.
-export function HomeMeta({ label, icon = 'briefcase-outline' }: { label?: string; icon?: keyof typeof Ionicons.glyphMap } = {}) {
+// Under the name on Home: a pill naming the role's dashboard, then the company
+// on its own line, so it gets the full width instead of squeezing beside the
+// pill (the longer "Employee Dashboard" / "Manager Dashboard" pills left it
+// only a few characters).
+export function HomeMeta() {
   const styles = useStyles();
   const colors = useColors();
   const user = useCurrentUser();
+  const dashboard = DASHBOARDS[user.role] ?? { label: `${ROLE_LABELS[user.role] ?? 'My'} Dashboard`, icon: 'grid-outline' };
   return (
-    <View style={styles.metaRow}>
-      <View style={[styles.rolePill, { backgroundColor: iconBadge(colors.primary) }]}>
-        <Ionicons name={icon} size={11} color={colors.primary} />
+    <View style={styles.meta}>
+      <View
+        style={[styles.rolePill, { backgroundColor: iconBadge(colors.primary) }]}
+        accessibilityLabel={dashboard.label}>
+        <Ionicons name={dashboard.icon} size={11} color={colors.primary} />
         <Text style={[styles.rolePillText, { color: colors.primary }]} numberOfLines={1}>
-          {label ?? (user.designation || ROLE_LABELS[user.role])}
+          {dashboard.label}
         </Text>
       </View>
       {user.companyName ? (
-        <Text style={styles.company} numberOfLines={1}>
+        <Text style={styles.company} numberOfLines={2}>
           {user.companyName}
         </Text>
       ) : null}
@@ -170,6 +164,7 @@ export function TicketPreviewList({
 
 export function RecentActivityPreview({ limit = 5 }: { limit?: number }) {
   const styles = useStyles();
+  const moneyText = useMoneyText();
   const { data } = useApi(() => dashboardApi.recentActivity({ limit }), [limit]);
   const activity = data?.data ?? [];
 
@@ -183,7 +178,7 @@ export function RecentActivityPreview({ limit = 5 }: { limit?: number }) {
             <ListRow
               key={entry.id}
               icon="pulse-outline"
-              title={entry.message}
+              title={moneyText(entry.message)}
               subtitle={`${entry.actor?.name ?? 'Someone'} · ${formatRelative(entry.createdAt)}`}
             />
           ))
@@ -232,8 +227,12 @@ export function DepartmentTicketsPreview({ refreshToken = 0 }: { refreshToken?: 
   });
 
   const options = [
-    { value: ALL_DEPARTMENTS, label: 'All' },
-    ...(departments.data?.data ?? []).map((department) => ({ value: department.id, label: department.name })),
+    { value: ALL_DEPARTMENTS, label: 'All', icon: ALL_DEPARTMENTS_ICON },
+    ...(departments.data?.data ?? []).map((department) => ({
+      value: department.id,
+      label: department.name,
+      icon: departmentIcon(department.name),
+    })),
   ];
 
   return (
@@ -348,35 +347,30 @@ const useStyles = createStyles((colors) => ({
   action: {
     flex: 1,
   },
-  profileButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     borderWidth: 2,
     borderColor: '#FFFFFF',
-  },
-  profileInitials: {
-    ...typography.footnoteStrong,
-    color: '#FFFFFF',
-  },
-  profileDot: {
-    position: 'absolute',
-    top: -1,
-    right: -1,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    borderWidth: 2,
-    backgroundColor: colors.danger,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  avatarStatus: {
+    position: 'absolute',
+    right: -1,
+    bottom: -1,
+    width: 13,
+    height: 13,
+    borderRadius: 7,
+    backgroundColor: '#16A34A',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
   avatarText: {
     ...typography.headline,
@@ -392,28 +386,27 @@ const useStyles = createStyles((colors) => ({
     borderWidth: 2,
     backgroundColor: colors.danger,
   },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.two,
+  meta: {
+    gap: 4,
     marginTop: 4,
   },
   rolePill: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
-    flexShrink: 1,
+    maxWidth: '100%',
   },
   rolePillText: {
     ...typography.captionStrong,
+    flexShrink: 1,
   },
   company: {
     ...typography.footnote,
     color: colors.textMuted,
-    flexShrink: 1,
   },
   list: {
     gap: spacing.three,
